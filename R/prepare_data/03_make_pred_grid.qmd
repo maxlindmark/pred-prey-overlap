@@ -45,7 +45,7 @@ Read data and depth-raster
 
 ```{r}
 # Read data
-d <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/spatial-metabolic-index/main/data/clean/catch_clean.csv") |> 
+d <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/data/clean/catch_clean.csv") |> 
   rename(X = x, Y = y)
 ```
 
