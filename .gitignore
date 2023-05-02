@@ -59,7 +59,7 @@ data/clean/catch_by_length.csv
 output/
 
 # Supp figures
-figures/supp/qq_density_sdm/
+figures/supp/cpue_oxygen_rasters/
 
 # Depth nc file
 data/Mean depth natural colour (with land).nc
