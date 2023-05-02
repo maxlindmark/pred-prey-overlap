@@ -4,7 +4,6 @@
 
 # Session Data files
 .RData
-.RDataTmp
 
 # User-specific files
 .Ruserdata
@@ -30,6 +29,7 @@ vignettes/*.pdf
 
 # knitr and R markdown default cache directories
 *_cache/
+*_files/
 /cache/
 
 # Temporary files created by R markdown
@@ -39,11 +39,30 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
-# pkgdown site
-docs/
+# Ignore all files named .DS_Store or ending with .log
+**/.DS_Store
+**.log
 
-# translation temp files
-po/*~
+# Data
+data/DATRAS_exchange/
+data/from_ale/
+data/depth_geo_tif
+data/gear_standardization/
+data/ICES_StatRec_mapto_ICES_Areas/
+data/NEMO_Nordic_SCOBI/
+data/NEMO_Nordic_SCOBI/
+data/substrate_tif/
 
-# RStudio Connect folder
-rsconnect/
+data/clean/catch_by_length.csv
+
+# Output
+output/
+
+# Supp figures
+figures/supp/qq_density_sdm/
+
+# Depth nc file
+data/Mean depth natural colour (with land).nc
+
+# Meetings
+meetings/
