@@ -1,103 +1,98 @@
-library(sdmTMB)
-library(tidyr)
-library(lme4)
-library(assertthat)
-
-set.seed(1)
-
-predictor_dat <- data.frame(
-  X = runif(300), Y = runif(300),
-  b1 = rnorm(300), b2 = rnorm(300),
-  year = rep(1:6, each = 50),
-  f_year = as.factor(rep(1:6, each = 50)) # random intercept
-)
-
-mesh <- make_mesh(predictor_dat, xy_cols = c("X", "Y"), cutoff = 0.1)
-
-sim_dat <- sdmTMB_simulate(
-  formula = ~ 1 + b1 + b2 + (1|f_year),
-  data = predictor_dat,
-  time = "year",
-  mesh = mesh,
-  family = gaussian(),
-  range = 0.5,
-  sigma_E = 0.2,
-  sigma_O = 0.7,
-  phi = 0.9,
-  seed = 123,
-  B = c(0.2, -0.4, 0.3)
-)
-sim_dat$f_year <- as.factor(sim_dat$year) # ml+fm: for testing random effects
-
-sim_dat_binom <- sdmTMB_simulate(
-  formula = ~ 1 + b1 + b2 + (1|f_year),
-  data = predictor_dat,
-  time = "year",
-  mesh = mesh,
-  family = binomial(),
-  range = 0.5,
-  sigma_E = 0.2,
-  sigma_O = 0.7,
-  phi = 0.9,
-  seed = 123,
-  B = c(0.2, -0.4, 0.3)
-)
-sim_dat_binom$f_year <- as.factor(sim_dat_binom$year) # ml+fm: for testing random effects
-
-sim_dat_tweedie <- sdmTMB_simulate(
-  formula = ~ 1 + b1 + b2 + (1|f_year),
-  data = predictor_dat,
-  time = "year",
-  mesh = mesh,
-  family = tweedie(),
-  range = 0.5,
-  sigma_E = 0.2,
-  sigma_O = 0.7,
-  phi = 0.9,
-  seed = 123,
-  B = c(0.2, -0.4, 0.3)
-)
-sim_dat_tweedie$f_year <- as.factor(sim_dat_tweedie$year) # ml+fm: for testing random effects
-
-sim_dat_pois <- sdmTMB_simulate(
-  formula = ~ 1 + b1 + b2 + (1|f_year),
-  data = predictor_dat,
-  time = "year",
-  mesh = mesh,
-  family = poisson(),
-  range = 0.5,
-  sigma_E = 0.2,
-  sigma_O = 0.7,
-  phi = 0.9,
-  seed = 123,
-  B = c(0.2, -0.4, 0.3)
-)
-sim_dat_pois$f_year <- as.factor(sim_dat_pois$year) # ml+fm: for testing random effects
-
-# Fit some example models so that we can test
-fit <- sdmTMB(observed ~ 1 + b1 + b2, data = sim_dat, mesh = mesh, time = "year")
-fit_re <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat, mesh = mesh, time = "year") # ml+fm: test random year
-fit_bi <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_binom, mesh = mesh, time = "year", family = binomial()) # ml+fm: binomial
-fit_tweedie <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_tweedie, mesh = mesh, time = "year", family = tweedie()) # ml+fm: tweedie
-fit_delta <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_tweedie, mesh = mesh, time = "year", family = delta_gamma()) # ml+fm: tweedie
-fit_pois <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_pois, mesh = mesh, time = "year", family = poisson()) # ml+fm: tweedie
-fit_st <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat, mesh = mesh, time = "year", family = student()) # ml+fm: tweedie
-
-
-
-# testing varCorr is the same as tidy
-t1 <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_binom, mesh = mesh, time = "year", family = binomial(), spatial = FALSE, spatiotemporal = FALSE)
-t2 <- lme4::glmer(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_binom, family = "binomial")
-
-tidy(t1, "ran_par") # this gives stdev (as it says)
-lme4::VarCorr(t2) # this also prints stdev, BUT, in Nakagaw they either use as.numeric(VarCorr()) OR VarCorr(model)$random[1], which both return the VARIANCE, which is why they don't square it!
-as.numeric(VarCorr(t2)) # variance!
-VarCorr(t2)$f_year[1] # variance!
-
-
-
-
-
+# library(sdmTMB)
+# library(tidyr)
+# library(lme4)
+# library(assertthat)
+# 
+# set.seed(1)
+# 
+# predictor_dat <- data.frame(
+#   X = runif(300), Y = runif(300),
+#   b1 = rnorm(300), b2 = rnorm(300),
+#   year = rep(1:6, each = 50),
+#   f_year = as.factor(rep(1:6, each = 50)) # random intercept
+# )
+# 
+# mesh <- make_mesh(predictor_dat, xy_cols = c("X", "Y"), cutoff = 0.1)
+# 
+# sim_dat <- sdmTMB_simulate(
+#   formula = ~ 1 + b1 + b2 + (1|f_year),
+#   data = predictor_dat,
+#   time = "year",
+#   mesh = mesh,
+#   family = gaussian(),
+#   range = 0.5,
+#   sigma_E = 0.2,
+#   sigma_O = 0.7,
+#   phi = 0.9,
+#   seed = 123,
+#   B = c(0.2, -0.4, 0.3)
+# )
+# sim_dat$f_year <- as.factor(sim_dat$year) # ml+fm: for testing random effects
+# 
+# sim_dat_binom <- sdmTMB_simulate(
+#   formula = ~ 1 + b1 + b2 + (1|f_year),
+#   data = predictor_dat,
+#   time = "year",
+#   mesh = mesh,
+#   family = binomial(),
+#   range = 0.5,
+#   sigma_E = 0.2,
+#   sigma_O = 0.7,
+#   phi = 0.9,
+#   seed = 123,
+#   B = c(0.2, -0.4, 0.3)
+# )
+# sim_dat_binom$f_year <- as.factor(sim_dat_binom$year) # ml+fm: for testing random effects
+# 
+# sim_dat_tweedie <- sdmTMB_simulate(
+#   formula = ~ 1 + b1 + b2 + (1|f_year),
+#   data = predictor_dat,
+#   time = "year",
+#   mesh = mesh,
+#   family = tweedie(),
+#   range = 0.5,
+#   sigma_E = 0.2,
+#   sigma_O = 0.7,
+#   phi = 0.9,
+#   seed = 123,
+#   B = c(0.2, -0.4, 0.3)
+# )
+# sim_dat_tweedie$f_year <- as.factor(sim_dat_tweedie$year) # ml+fm: for testing random effects
+# 
+# sim_dat_pois <- sdmTMB_simulate(
+#   formula = ~ 1 + b1 + b2 + (1|f_year),
+#   data = predictor_dat,
+#   time = "year",
+#   mesh = mesh,
+#   family = poisson(),
+#   range = 0.5,
+#   sigma_E = 0.2,
+#   sigma_O = 0.7,
+#   phi = 0.9,
+#   seed = 123,
+#   B = c(0.2, -0.4, 0.3)
+# )
+# sim_dat_pois$f_year <- as.factor(sim_dat_pois$year) # ml+fm: for testing random effects
+# 
+# # Fit some example models so that we can test
+# fit <- sdmTMB(observed ~ 1 + b1 + b2, data = sim_dat, mesh = mesh, time = "year")
+# fit_re <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat, mesh = mesh, time = "year") # ml+fm: test random year
+# fit_bi <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_binom, mesh = mesh, time = "year", family = binomial()) # ml+fm: binomial
+# fit_tweedie <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_tweedie, mesh = mesh, time = "year", family = tweedie()) # ml+fm: tweedie
+# fit_delta <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_tweedie, mesh = mesh, time = "year", family = delta_gamma()) # ml+fm: tweedie
+# fit_pois <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_pois, mesh = mesh, time = "year", family = poisson()) # ml+fm: tweedie
+# fit_st <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat, mesh = mesh, time = "year", family = student()) # ml+fm: tweedie
+# 
+# 
+# 
+# # testing varCorr is the same as tidy
+# t1 <- sdmTMB(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_binom, mesh = mesh, time = "year", family = binomial(), spatial = FALSE, spatiotemporal = FALSE)
+# t2 <- lme4::glmer(observed ~ 1 + b1 + b2 + (1|f_year), data = sim_dat_binom, family = "binomial")
+# 
+# tidy(t1, "ran_par") # this gives stdev (as it says)
+# lme4::VarCorr(t2) # this also prints stdev, BUT, in Nakagaw they either use as.numeric(VarCorr()) OR VarCorr(model)$random[1], which both return the VARIANCE, which is why they don't square it!
+# as.numeric(VarCorr(t2)) # variance!
+# VarCorr(t2)$f_year[1] # variance!
 
 # ml+fm: ... change from x to x ... ?
 fixef <- function(x) {
