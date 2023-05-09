@@ -268,43 +268,43 @@ r2.sdmTMB <- function(x, which_fixef = NULL, method = NULL) {
   as.data.frame(out) |> pivot_longer(everything(), names_to = "component", values_to = "R2")
   
 }
-
-r2.sdmTMB(fit)
-r2.sdmTMB(fit_re)
-
-r2.sdmTMB(fit_bi, method = "observation-level")
-r2.sdmTMB(fit_bi)
-r2.sdmTMB(fit_pois) # gives binomial error!!! wrong nesting if else?? it works if bimom hashtagged!
-r2.sdmTMB(fit_tweedie)
-
-r2.sdmTMB(fit_st)
-r2.sdmTMB(fit_delta)
-
-# Partition fixed effects R2? An attempt:
-dl <- list()
-
-x <- fit_tweedie
-which_fixef <- nrow(tidy(x))
-for(i in 1:which_fixef) {
-  temp <- r2.sdmTMB(x, which_fixef = i) |>
-    filter(component == "marginal") |>
-    mutate(variable = tidy(x)$term[i])
-    
-    dl[[i]] <- temp
-    
-    }
-  
-partial_R2 <- bind_rows(dl)
-  
-out <- r2.sdmTMB(fit_tweedie) |>
-  mutate(variable = ifelse(!component == "marginal", component, "marginal"))
-  
-out <- out |> full_join(partial_R2)
-
-library(ggplot2)
-# how to deal with intercept?
-ggplot(out |> filter(!variable %in% c("conditional", "marginal")), aes(1, R2, fill = variable)) + 
-  geom_bar(stat = "identity")
+# 
+# r2.sdmTMB(fit)
+# r2.sdmTMB(fit_re)
+# 
+# r2.sdmTMB(fit_bi, method = "observation-level")
+# r2.sdmTMB(fit_bi)
+# r2.sdmTMB(fit_pois) # gives binomial error!!! wrong nesting if else?? it works if bimom hashtagged!
+# r2.sdmTMB(fit_tweedie)
+# 
+# r2.sdmTMB(fit_st)
+# r2.sdmTMB(fit_delta)
+# 
+# # Partition fixed effects R2? An attempt:
+# dl <- list()
+# 
+# x <- fit_tweedie
+# which_fixef <- nrow(tidy(x))
+# for(i in 1:which_fixef) {
+#   temp <- r2.sdmTMB(x, which_fixef = i) |>
+#     filter(component == "marginal") |>
+#     mutate(variable = tidy(x)$term[i])
+#     
+#     dl[[i]] <- temp
+#     
+#     }
+#   
+# partial_R2 <- bind_rows(dl)
+#   
+# out <- r2.sdmTMB(fit_tweedie) |>
+#   mutate(variable = ifelse(!component == "marginal", component, "marginal"))
+#   
+# out <- out |> full_join(partial_R2)
+# 
+# library(ggplot2)
+# # how to deal with intercept?
+# ggplot(out |> filter(!variable %in% c("conditional", "marginal")), aes(1, R2, fill = variable)) + 
+#   geom_bar(stat = "identity")
 
 # r2.sdmTMB(fit_tweedie, which_fixef = 1)
 # r2.sdmTMB(fit_tweedie, which_fixef = c(1, 2))
