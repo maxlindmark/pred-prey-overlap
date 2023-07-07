@@ -3,6 +3,8 @@ library(sf)
 # devtools::install_github("seananderson/ggsidekick") # not on CRAN 
 library(ggsidekick)
 
+theme_set(theme_sleek())
+
 sf::sf_use_s2(FALSE)
 
 # Specify map ranges
