@@ -28,6 +28,7 @@ swe_coast_proj <- sf::st_transform(swe_coast, crs = utm_zone33)
 theme_facet_map <- function(base_size = 11, base_family = "") {
   theme_sleek(base_size = base_size, base_family = "") +
     theme(
+      axis.text.x = element_text(angle = 90),
       legend.direction = "horizontal",
       legend.margin = margin(1, 1, 1, 1),
       legend.box.margin = margin(0, 0, 0, 0),
