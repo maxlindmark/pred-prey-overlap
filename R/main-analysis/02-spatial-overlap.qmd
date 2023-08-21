@@ -1,0 +1,528 @@
+---
+title: "Fit density models to cod of different sizes and calculate spatial overlap with prey"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format: 
+  html:
+    embed-resources: true
+    fig-width: 8
+    fig-asp: 0.618
+knitr: 
+  opts_chunk:
+    fig.align: center
+editor: source
+execute: 
+  echo: true
+  eval: true
+  cache: true
+---
+
+## Load packages & source functions
+
+```{r libraries}
+#| cache: false
+#| message: false
+#| warning: false
+#| code-fold: true
+
+# Using dev branch of sdmTMB
+# remotes::install_github("pbs-assess/sdmTMB", dependencies = TRUE)
+
+# with_libpaths(new = "/Users/maxlindmark/Dropbox/Max work/R/sdmTMB-zeta-intercept/",
+#               install_github("pbs-assess/sdmTMB", ref = "zeta-intercept"))
+
+library(sdmTMB, lib.loc = "/Users/maxlindmark/Dropbox/Max work/R/sdmTMB-zeta-intercept")
+
+pkgs <- c("tidyverse", "RCurl", "viridis", "devtools", "terra", "readxl", "mapplots", "tidylog") 
+
+# minpack.lm needed if using nlsLM()
+if(length(setdiff(pkgs,rownames(installed.packages()))) > 0){
+
+    install.packages(setdiff(pkgs, rownames(installed.packages())), dependencies = T)
+  
+  }
+
+invisible(lapply(pkgs, library, character.only = T))
+
+# Packages not on CRAN or dev version
+# remotes::install_github("pbs-assess/sdmTMB", dependencies = TRUE)
+library(sdmTMB)
+
+# devtools::install_github("seananderson/ggsidekick") # not on CRAN 
+library(ggsidekick)
+theme_set(theme_sleek(base_size = 20))
+
+# Source code for map plots
+# You need: # devtools::install_github("seananderson/ggsidekick") # not on CRAN; library(ggsidekick)
+# Source code for map plots
+# You need: # devtools::install_github("seananderson/ggsidekick") # not on CRAN; library(ggsidekick)
+devtools::source_url("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/R/functions/map-plot.R")
+
+options(ggplot2.continuous.colour = "viridis")
+
+# Source overlap functions
+devtools::source_url("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/R/functions/overlap-indices.R")
+
+# Set path
+home <- here::here()
+```
+
+## Read spatiotemporal predictions from 01-fit-sdm.qmd
+
+```{r}
+# Use only one of them because they are so similar
+cod_pred <- read_csv(paste0(home, "/output/pred_cod.csv"))
+```
+
+## Add in prey to density data
+Saduria
+
+```{r read Saduria raster from Gogina et al 2020 ICES}
+# TODO: Update years!?
+saduria <- terra::rast(paste0(home, "/data/saduria-tif/FWBiomassm_raster_19812019presHighweightcor_no0_newZi.tif"))
+
+WGS84 <- "+proj=longlat +datum=WGS84"
+
+saduria_latlon <- terra::project(saduria, WGS84)
+
+density_saduria <- terra::extract(saduria_latlon, cod_pred %>% dplyr::select(lon, lat), method = "bilinear")
+
+cod_pred$density_saduria <- density_saduria$FWBiomassm_raster_19812019presHighweightcor_no0_newZi
+
+ggplot(cod_pred, aes(X, Y, fill = density_saduria))  + 
+  geom_raster()
+```
+
+Pelagics
+
+```{r}
+# TODO: Update years!
+# Read data on rectangle level
+spr <- read_xlsx(paste0(home, "/data/BIAS/N and B per Rect. 1991-2020.xlsx"),
+                 sheet = 4) |>
+  mutate(sub_div = ifelse(Sub_Div == "28_2", "28", Sub_Div)) |> 
+  filter(sub_div %in% c("24", "25", "26", "27", "28")) |> 
+  rename("ices_rect" = "RECT",
+         "Year" = "ANNUS") |>
+  mutate_at(vars(`1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`), ~replace_na(., 0)) |> # I need to replace NA with 0, else I can't sum! According to Olavi who sent the data, NA means 0 and nothing else. Rectangle*year combinations that do not have information about biomass are simply not included in this data
+  mutate(ices_rect = as.factor(ices_rect),
+         Species = "Sprat",
+         biomass_spr = `1`+`2`+`3`+`4`+`5`+`6`+`7`+`8`, 
+         IDr = paste(ices_rect, Year, sep = "."),
+         lon = ices.rect(ices_rect)$lon,
+         lat = ices.rect(ices_rect)$lat) |> # Make new ID
+  filter(Year > 1992 & Year < 2020)
+
+spr <- spr |> add_utm_columns(ll_names = c("lon", "lat"),
+                              utm_crs = 32633)
+
+her <- read_xlsx(paste0(home, "/data/BIAS/N and B per Rect. 1991-2020.xlsx"),
+                 sheet = 3) |>
+  mutate(sub_div = ifelse(Sub_Div == "28_2", "28", Sub_Div)) |> 
+  filter(sub_div %in% c("24", "25", "26", "27", "28")) |> 
+  rename("ices_rect" = "RECT",
+         "Year" = "ANNUS") |>
+  mutate_at(vars(`1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`), ~replace_na(., 0)) |>
+  mutate(ices_rect = as.factor(ices_rect),
+         Species = "Herring",
+         biomass_her = `1`+`2`+`3`+`4`+`5`+`6`+`7`+`8`, 
+         IDr = paste(ices_rect, Year, sep = "."),
+         lon = ices.rect(ices_rect)$lon,
+         lat = ices.rect(ices_rect)$lat) |> # Make new ID
+  filter(Year > 1992 & Year < 2020)
+
+her <- her |> add_utm_columns(ll_names = c("lon", "lat"),
+                              utm_crs = 32633)
+
+# Plot distribution over time in the whole area
+plot_map_fc + 
+  geom_point(data = spr, aes(X*1000, Y*1000, color = biomass_spr), size = 1.5) +
+  facet_wrap(~Year) + 
+  scale_color_viridis(trans = "sqrt", name = "Sprat biomass (tonnes)")
+
+plot_map_fc + 
+  geom_point(data = her, aes(X*1000, Y*1000, color = biomass_her), size = 1.5) +
+  facet_wrap(~Year) + 
+  scale_color_viridis(trans = "sqrt", name = "Herring biomass (tonnes)")
+
+# How many unique rows per IDr?
+her |>
+  group_by(IDr) |> 
+  mutate(n = n()) |> 
+  ggplot(aes(factor(n))) + geom_bar()
+
+spr |>
+  group_by(IDr) |> 
+  mutate(n = n()) |> 
+  ggplot(aes(factor(n))) + geom_bar()
+
+# Ok, some ID's with two rows...
+spr |>
+  group_by(IDr) |> 
+  mutate(n = n()) |> 
+  filter(n == 2) |> 
+  ungroup() |> 
+  as.data.frame() |> 
+  head(20)
+
+# It's because rectangles somehow being in different sub divisions.
+# I need to group by IDr and summarize
+spr_sum <- spr |>
+  group_by(IDr) |> 
+  summarise(biomass_spr = sum(biomass_spr)) |> # Sum abundance within IDr
+  distinct(IDr, .keep_all = TRUE) |> # Remove duplicate IDr
+  mutate(ID_temp = IDr) |> # Create temporary IDr that we can use to split in order
+  # to get Year and StatRect back into the summarized data
+  separate(ID_temp, c("StatRec", "Year"), sep = 4)
+
+nrow(spr_sum) 
+nrow(spr)
+nrow(spr |> group_by(IDr) |> mutate(n = n()) |> filter(n == 2))
+
+# Check with a specific rectangle
+filter(spr_sum, IDr == "39G4.1991")
+filter(spr, IDr == "39G4.1991")
+
+# This should equal 1 (new # rows =  old - duplicated IDr)
+nrow(spr_sum) / (nrow(spr) - 0.5*nrow(spr |> group_by(IDr) |> mutate(n = n()) |> filter(n == 2)))
+
+# How many rows per rectangle?
+spr_sum |>
+  group_by(IDr) |> 
+  mutate(n = n()) |> 
+  ungroup() |> 
+  distinct(n)
+
+# Now do the same for herring
+her_sum <- her |>
+  group_by(IDr) |> 
+  summarise(biomass_her = sum(biomass_her)) |> # Sum abundance within IDr
+  distinct(IDr, .keep_all = TRUE) |> # Remove duplicate IDr
+  mutate(ID_temp = IDr) |> # Create temporary IDr that we can use to split in order
+  # to get Year and StatRect back into the summarized data
+  separate(ID_temp, c("StatRec", "Year"), sep = 4)
+
+nrow(her_sum) 
+nrow(her)
+nrow(her |> group_by(IDr) |> mutate(n = n()) |> filter(n == 2))
+
+filter(her_sum, IDr == "39G4.1991")
+filter(her, IDr == "39G4.1991")
+
+# This should equal 1 (new # rows =  old - duplicated IDr)
+nrow(her_sum) / (nrow(her) - 0.5*nrow(her |> group_by(IDr) |> mutate(n = n()) |> filter(n == 2)))
+
+# How many rows per rectangle?
+her_sum |>
+  group_by(IDr) |> 
+  mutate(n = n()) |> 
+  ungroup() |> 
+  distinct(n)
+
+# Join pelagic data
+pel <- left_join(her_sum, spr_sum)
+
+cod_pred <- cod_pred |>
+  mutate(IDr = paste(ices_rect, year, sep = ".")) |> 
+  left_join(pel)
+  
+names(cod_pred)
+
+# If NA on the rectangle level, take the average values across ices rectangles *within* the sub-division
+# If no rectangles within the SD, take the annual mean
+cod_pred <- cod_pred |> 
+  group_by(year, sub_div) |> 
+  mutate(biomass_her_year_sd_mean = mean(biomass_her, na.rm = TRUE),
+         biomass_spr_year_sd_mean = mean(biomass_spr, na.rm = TRUE)) |> 
+  ungroup() |>
+  group_by(year) |> 
+  mutate(biomass_her_year_mean = mean(biomass_her, na.rm = TRUE),
+         biomass_spr_year_mean = mean(biomass_spr, na.rm = TRUE)) |> 
+  ungroup() |> 
+  mutate(biomass_her = ifelse(is.na(biomass_her), biomass_her_year_sd_mean, biomass_her),
+         biomass_spr = ifelse(is.na(biomass_spr), biomass_spr_year_sd_mean, biomass_spr)) |> 
+  mutate(biomass_her = ifelse(is.na(biomass_her), biomass_her_year_mean, biomass_her),
+         biomass_spr = ifelse(is.na(biomass_spr), biomass_spr_year_mean, biomass_spr)) |> 
+  dplyr::select(-biomass_her_year_mean, -biomass_her_year_mean, 
+                -biomass_spr_year_sd_mean, -biomass_spr_year_mean)
+
+# Test plot
+plot_map_fc + 
+  geom_raster(data = cod_pred |> filter(year < 2020), aes(X*1000, Y*1000, fill = biomass_spr)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Sprat biomass (tonnes)")
+
+plot_map_fc + 
+  geom_raster(data = cod_pred |> filter(year < 2020), aes(X*1000, Y*1000, fill = biomass_her)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Sprat biomass (tonnes)")
+
+
+# Now add in the sub division values (in case we want to look at that also)
+biomass_spr_sd <- read_xlsx(paste0(home, "/data/BIAS/N and B per SD 1991-2020.xlsx"),
+                            sheet = 4) |>
+  mutate(sub_div = ifelse(Sub_Div == "28_2", "28", Sub_Div)) |>
+  filter(sub_div %in% c("24", "25", "26", "27", "28")) |>
+  rename("Year" = "ANNUS") |>
+  mutate_at(vars(`AGE1`, `AGE2`, `AGE3`, `AGE4`, `AGE5`, `AGE6`, `AGE7`, `AGE8+`), ~replace_na(., 0)) |> # I need to replace NA with 0, else I can't sum! According to Olavi who sent the data, NA means 0 and nothing else. Rectangle*year combinations that do not have information about biomass are simply not included in this data
+  mutate(sub_div = as.factor(sub_div),
+         Species = "Sprat",
+         biomass_spr_sd = `AGE1`+`AGE2`+`AGE3`+`AGE4`+`AGE5`+`AGE6`+`AGE7`+`AGE8+`, # omitting `0+` here
+         ID_sd_year = paste(sub_div, Year, sep = ".")) |> # Make new ID
+  dplyr::select(biomass_spr_sd, ID_sd_year)
+
+biomass_her_sd <- read_xlsx(paste0(home, "/data/BIAS/N and B per SD 1991-2020.xlsx"),
+                            sheet = 3) |>
+  mutate(sub_div = ifelse(Sub_Div == "28_2", "28", Sub_Div)) |>
+  filter(sub_div %in% c("24", "25", "26", "27", "28")) |>
+  rename("Year" = "ANNUS") |>
+  mutate_at(vars(`AGE1`, `AGE2`, `AGE3`, `AGE4`, `AGE5`, `AGE6`, `AGE7`, `AGE8+`), ~replace_na(., 0)) |> 
+  mutate(sub_div = as.factor(sub_div),
+         Species = "Sprat",
+         biomass_her_sd = `AGE1`+`AGE2`+`AGE3`+`AGE4`+`AGE5`+`AGE6`+`AGE7`+`AGE8+`,
+         ID_sd_year = paste(sub_div, Year, sep = ".")) |>
+  dplyr::select(biomass_her_sd, ID_sd_year)
+
+# Add in the same id to the pred_grid
+cod_pred <- cod_pred |> mutate(ID_sd_year = paste(sub_div, year, sep = "."))
+
+cod_pred <- left_join(cod_pred, biomass_spr_sd)
+cod_pred <- left_join(cod_pred, biomass_her_sd)
+
+# Plot. Here I also have NAs. If NA, take the annual average
+plot_map_fc + 
+  geom_raster(data = cod_pred |> filter(year < 2020), aes(X*1000, Y*1000, fill = biomass_spr_sd)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Sprat biomass (tonnes)")
+
+plot_map_fc + 
+  geom_raster(data = cod_pred |> filter(year < 2020), aes(X*1000, Y*1000, fill = biomass_her_sd)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Herring biomass (tonnes)")
+
+cod_pred <- cod_pred |> 
+  group_by(year) |> 
+  mutate(biomass_her_mean_sd = mean(biomass_her_sd, na.rm = TRUE),
+         biomass_spr_mean_sd = mean(biomass_spr_sd, na.rm = TRUE)) |> 
+  ungroup() |> 
+  mutate(biomass_her_sd = ifelse(is.na(biomass_her_sd), biomass_her_mean_sd, biomass_her_sd),
+         biomass_spr_sd = ifelse(is.na(biomass_spr_sd), biomass_spr_mean_sd, biomass_spr_sd))
+
+# Save plots with "imputed" biomasses
+# subdivision
+plot_map_fc + 
+  geom_raster(data = cod_pred |> filter(year < 2020), aes(X*1000, Y*1000, fill = biomass_spr_sd)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Sprat biomass (tonnes)")
+
+ggsave(paste0(home, "/figures/supp/spatial_sprat_biomass_sd.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map_fc + 
+  geom_raster(data = cod_pred |> filter(year < 2020), aes(X*1000, Y*1000, fill = biomass_her_sd)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Herring biomass (tonnes)")
+
+ggsave(paste0(home, "/figures/supp/spatial_herring_biomass_sd.pdf"), width = 17, height = 17, units = "cm")
+
+# Ices rectangle
+plot_map_fc + 
+  geom_raster(data = cod_pred |> filter(year < 2020), aes(X*1000, Y*1000, fill = biomass_spr)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Sprat biomass (tonnes)")
+
+ggsave(paste0(home, "/figures/supp/spatial_sprat_biomass_rec.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map_fc + 
+  geom_raster(data = cod_pred |> filter(year < 2020), aes(X*1000, Y*1000, fill = biomass_her)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Herring biomass (tonnes)")
+
+ggsave(paste0(home, "/figures/supp/spatial_herring_biomass_rec.pdf"), width = 17, height = 17, units = "cm")
+
+# Drop NA now (years after 2019 because I don't yet have pelagic data from that time)
+cod_pred <- cod_pred |> filter(year < 2020)
+
+# Trim predicted biomass densities
+cod_pred <- cod_pred |> filter(est < quantile(est, probs = 0.999))
+```
+
+## Calculate spatial overlap indices
+Remember, pelagic data is from Q4 while saduria data is not resolved on a finer scale than year
+
+```{r}
+# Pelagics
+# Calculate overlap indices in space
+cod_pel <- cod_pred |> 
+  group_by(year, quarter) |> 
+  mutate(# sprat
+         cod_spr_ovr = asymmalpha_overlapspfn(pred = est, prey = biomass_spr),
+         cod_spr_ovr_sd = asymmalpha_overlapspfn(pred = est, prey = biomass_spr_sd),
+         
+         # herring
+         cod_her_ovr = asymmalpha_overlapspfn(pred = est, prey = biomass_her),
+         cod_her_ovr_sd = asymmalpha_overlapspfn(pred = est, prey = biomass_her_sd)) |> 
+  ungroup()
+  
+# Calculate summarised overlaps
+cod_pel_sum <- cod_pel |> 
+  filter(quarter == 4) |> 
+  group_by(year) |> 
+  summarise(cod_spr_ovr_tot = asymmalpha_overlapspfn_tot(pred = est, prey = biomass_spr),
+            cod_spr_ovr_sd_tot = asymmalpha_overlapspfn_tot(pred = est, prey = biomass_spr_sd),
+            
+            cod_her_ovr_tot = asymmalpha_overlapspfn_tot(pred = est, prey = biomass_her),
+            cod_her_ovr_sd_tot = asymmalpha_overlapspfn_tot(pred = est, prey = biomass_her_sd),
+            
+            # centre of gravity)
+            cod_spr_cog_Y = weighted.mean(Y, cod_spr_ovr),
+            cod_spr_cog_X = weighted.mean(X, cod_spr_ovr),
+            cod_spr_cog_sd_Y = weighted.mean(Y, cod_spr_ovr_sd),
+            cod_spr_cog_sd_X = weighted.mean(X, cod_spr_ovr_sd),
+            
+            cod_her_cog_Y = weighted.mean(Y, cod_her_ovr),
+            cod_her_cog_X = weighted.mean(X, cod_her_ovr),
+            cod_her_cog_sd_Y = weighted.mean(Y, cod_her_ovr_sd),
+            cod_her_cog_sd_X = weighted.mean(X, cod_her_ovr_sd)) |> 
+  ungroup()
+
+# Saduria
+# Calculate overlap indices in space
+cod_ben <- cod_pred |> 
+  drop_na(density_saduria) |> 
+  group_by(year, quarter) |> 
+  mutate(cod_sad_ovr = asymmalpha_overlapspfn(pred = est, prey = density_saduria)) |> 
+  ungroup()
+
+# Calculate summarised overlaps
+cod_ben_sum <- cod_ben |> 
+  drop_na(density_saduria) |> 
+  group_by(year, quarter) |> 
+  # centre of gravity
+  summarise(cod_sad_ovr_tot = asymmalpha_overlapspfn_tot(pred = est, prey = density_saduria),
+            
+            cod_sad_cog_Y = weighted.mean(Y, cod_sad_ovr),
+            cod_sad_cog_X = weighted.mean(X, cod_sad_ovr)) |> 
+  ungroup()
+```
+
+Plot overlap
+
+```{r plot overlap in space}
+# Plot overlap in space
+# Sprat
+plot_map_fc + 
+  geom_raster(data = cod_pel |> filter(year < 2020),
+              aes(X*1000, Y*1000, fill = cod_spr_ovr)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(name = "Cod-Sprat overlap (tonnes)", trans = "sqrt")
+
+ggsave(paste0(home, "/figures/spr_overlap_space.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map_fc + 
+  geom_raster(data = cod_pel |> filter(year < 2020),
+              aes(X*1000, Y*1000, fill = cod_spr_ovr_sd)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(name = "Cod-Sprat overlap (tonnes)", trans = "sqrt")
+
+ggsave(paste0(home, "/figures/supp/spr_overlap_space_sd.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map + 
+  geom_point(data = cod_pel_sum |> filter(year < 2020),
+             aes(cod_spr_cog_X*1000, cod_spr_cog_Y*1000, color = year))
+
+ggsave(paste0(home, "/figures/supp/spr_overlap_cog.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map + 
+  geom_point(data = cod_pel_sum |> filter(year < 2020),
+             aes(cod_spr_cog_sd_X*1000, cod_spr_cog_sd_Y*1000, color = year))
+
+ggsave(paste0(home, "/figures/supp/spr_overlap_cog_sd.pdf"), width = 17, height = 17, units = "cm")
+
+# Herring
+plot_map_fc + 
+  geom_raster(data = cod_pel |> filter(year < 2020),
+              aes(X*1000, Y*1000, fill = cod_her_ovr)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(name = "Cod-Herring overlap (tonnes)", trans = "sqrt")
+
+ggsave(paste0(home, "/figures/her_overlap_space.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map_fc + 
+  geom_raster(data = cod_pel |> filter(year < 2020),
+              aes(X*1000, Y*1000, fill = cod_her_ovr_sd)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(name = "Cod-Herring overlap (tonnes)", trans = "sqrt")
+
+ggsave(paste0(home, "/figures/supp/her_overlap_space_sd.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map + 
+  geom_point(data = cod_pel_sum |> filter(year < 2020),
+             aes(cod_her_cog_X*1000, cod_her_cog_Y*1000, color = year))
+
+ggsave(paste0(home, "/figures/supp/her_overlap_cog.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map + 
+  geom_point(data = cod_pel_sum |> filter(year < 2020),
+             aes(cod_her_cog_sd_X*1000, cod_her_cog_sd_Y*1000, color = year))
+
+ggsave(paste0(home, "/figures/supp/her_overlap_cog_sd.pdf"), width = 17, height = 17, units = "cm")
+
+# Saduria
+plot_map_fc + 
+  geom_raster(data = cod_ben |> filter(year < 2020 & quarter == 4), # TODO: or q1??
+              aes(X*1000, Y*1000, fill = cod_sad_ovr)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(name = "Cod-Saduria overlap (tonnes)", trans = "sqrt")
+
+ggsave(paste0(home, "/figures/sad_overlap_space_q4.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map_fc + 
+  geom_raster(data = cod_ben |> filter(year < 2020 & quarter == 1),
+              aes(X*1000, Y*1000, fill = cod_sad_ovr)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(name = "Cod-Saduria overlap (tonnes)", trans = "sqrt")
+
+ggsave(paste0(home, "/figures/supp/sad_overlap_space_q1.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map + 
+  geom_point(data = cod_ben_sum |> filter(year < 2020 & quarter == 4),
+             aes(cod_sad_cog_X*1000, cod_sad_cog_Y*1000, color = year))
+
+ggsave(paste0(home, "/figures/supp/sad_overlap_cog_q4.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map + 
+  geom_point(data = cod_ben_sum |> filter(year < 2020 & quarter == 1),
+             aes(cod_sad_cog_X*1000, cod_sad_cog_Y*1000, color = year))
+
+ggsave(paste0(home, "/figures/supp/sad_overlap_cog_q1.pdf"), width = 17, height = 17, units = "cm")
+```
+
+Plot overlap over time
+
+```{r}
+cod_pel_sum_wide <- cod_pel_sum |> 
+  pivot_longer(c("cod_spr_ovr_tot", "cod_spr_ovr_sd_tot", "cod_her_ovr_tot", "cod_her_ovr_sd_tot")) |> 
+  mutate(Species = ifelse(name %in% c("cod_spr_ovr_tot", "cod_spr_ovr_sd_tot"), "Sprat", "Herring")) |> 
+  mutate(Scale = ifelse(name %in% c("cod_her_ovr_sd_tot", "cod_spr_ovr_sd_tot"), "Subdivision", "ICES Rect."))
+
+ggplot(data = cod_pel_sum_wide, aes(year, value)) +
+  geom_point(color = "grey20") +
+  geom_line() + 
+  labs(x = "Year", y = "Asymmetrical alpha overlap index") +
+  facet_grid(Scale ~ Species) +
+  geom_smooth(method = "gam", formula = y~s(x, k = 4), color = "tomato3") + 
+  theme(aspect.ratio = 1)
+
+ggsave(paste0(home, "/figures/pelagic_overlap.pdf"), width = 17, height = 17, units = "cm")
+
+# Saduria
+ggplot(data = cod_ben_sum, aes(year, cod_sad_ovr_tot)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Year", y = "Asymmetrical alpha overlap index") +
+  geom_smooth(method = "gam", formula = y~s(x, k = 4), color = "tomato3") +
+  facet_wrap(~quarter) + 
+  theme(aspect.ratio = 1)
+
+ggsave(paste0(home, "/figures/saduria_overlap.pdf"), width = 17, height = 17, units = "cm")
+```

@@ -1,0 +1,83 @@
+---
+title: "Summarise CPUE data"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format: 
+  html:
+    embed-resources: true
+    fig-width: 8
+    #fig-asp: 0.618
+knitr: 
+  opts_chunk:
+    fig.align: center
+editor: source
+execute: 
+  echo: true
+  eval: true
+  cache: false
+---
+
+## Load libraries
+
+```{r}
+library(tidyverse)
+
+# Set path
+home <- here::here()
+```
+
+## Read data
+
+```{r}
+d <- read.csv(paste0(home, "/data/clean/catch_by_length.csv"))
+
+# Summarize total density by haul and size-class
+d_sad <- d %>% 
+  mutate(size_cl = ifelse(length_cm > 15 & length_cm < 50, "cod_sad", "all")) |> 
+  group_by(haul_id, size_cl) %>% 
+  summarise(density = sum(density)) %>% 
+  ungroup() |> 
+  filter(!size_cl == "all")
+
+d_pel <- d %>% 
+  mutate(size_cl = ifelse(length_cm > 20, "cod_pel", "all")) |> 
+  group_by(haul_id, size_cl) %>% 
+  summarise(density = sum(density)) %>% 
+  ungroup() |> 
+  filter(!size_cl == "all")
+
+d_com <- d %>% 
+  mutate(size_cl = ifelse(length_cm > 15, "cod_com", "all")) |> 
+  group_by(haul_id, size_cl) %>% 
+  summarise(density = sum(density)) %>% 
+  ungroup() |> 
+  filter(!size_cl == "all")
+
+d_sum <- bind_rows(d_sad, d_pel, d_com) |> pivot_wider(names_from = size_cl, values_from = density)
+
+# Now left join in all other information...
+d_haul <- d %>% 
+  distinct(haul_id, .keep_all = TRUE) %>% 
+  dplyr::select(-density, -length_cm)
+
+d_haul <- left_join(d_haul, d_sum, by = "haul_id")
+
+# Check distributions of densities across hauls
+d_haul %>% 
+  pivot_longer(c(cod_sad, cod_pel, cod_com)) %>% 
+  ggplot(aes(log(value))) + 
+  geom_histogram() + 
+  facet_wrap(~name, scales = "free_y")
+
+# Fix quarters! These are "rounding errors", because I calculate quarter based on month, and sometimes a quarter survey extends into a month of another quarter. Hence a mismatch between quarter and month
+d_haul <- d_haul |> 
+  mutate(quarter = ifelse(quarter == 2, 1, quarter),
+         quarter = ifelse(quarter == 3, 4, quarter))
+
+# Trim some extreme quantiles
+d_haul <- d_haul |> 
+  filter(cod_sad < quantile(cod_sad, probs = 0.995))
+
+# Save!
+write_csv(d_haul, paste0(home, "/data/clean/catch_clean.csv"))
+```

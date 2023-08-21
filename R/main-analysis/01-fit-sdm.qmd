@@ -1,0 +1,327 @@
+---
+title: "Fit density models to cod of different sizes"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format: 
+  html:
+    embed-resources: true
+    fig-width: 8
+    #fig-asp: 0.618
+knitr: 
+  opts_chunk:
+    fig.align: center
+editor: source
+execute: 
+  echo: true
+  eval: true
+  cache: true
+---
+
+## Load packages & source functions
+
+```{r load libraries}
+#| cache: false
+#| message: false
+#| warning: false
+#| code-fold: true
+
+# Using dev branch of sdmTMB
+# remotes::install_github("pbs-assess/sdmTMB", dependencies = TRUE)
+
+pkgs <- c("tidyverse", "RCurl", "viridis", "devtools", "tidylog", "sdmTMBextra") 
+
+# minpack.lm needed if using nlsLM()
+if(length(setdiff(pkgs,rownames(installed.packages()))) > 0){
+
+    install.packages(setdiff(pkgs, rownames(installed.packages())), dependencies = T)
+  
+  }
+
+invisible(lapply(pkgs, library, character.only = T))
+
+# Packages not on CRAN or dev version
+# remotes::install_github("pbs-assess/sdmTMB", dependencies = TRUE)
+library(sdmTMB)
+
+# Source code for map plots
+# You need: # devtools::install_github("seananderson/ggsidekick") # not on CRAN; library(ggsidekick)
+devtools::source_url("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/R/functions/map-plot.R")
+options(ggplot2.continuous.colour = "viridis")
+
+# Set path
+home <- here::here()
+```
+
+```{r load cache}
+# To load entire cache in interactive r session, do: 
+# qwraps2::lazyload_cache_dir(path = paste0(home, "/R/main-analysis/01-fit-sdm_cache/html"))
+```
+
+## Read and summarize data
+
+```{r read biomass data}
+#| cache: false
+# Read & scale data
+d <- #read_csv("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/data/clean/catch_clean.csv") |> 
+  read_csv(paste0(home, "/data/clean/catch_clean.csv")) |> 
+  rename(X = x, Y = y) |> 
+  drop_na(depth, oxy, sal, temp) |> 
+  mutate(temp_sc = scale(temp),
+         temp_sq = temp_sc^2,
+         oxy_sc = scale(oxy),
+         oxy_sq = oxy_sc^2,
+         sal_sc = scale(sal),
+         depth_sc = scale(depth),
+         depth_sq = depth_sc^2,
+         quarter_f = as.factor(quarter),
+         year_f = as.factor(year))
+```
+
+## Read and scale the prediction grid
+
+```{r}
+#| cache: false
+pred_grid <- bind_rows(read_csv(paste0(home, "/data/clean/pred_grid_(1_2).csv")),
+                       read_csv(paste0(home, "/data/clean/pred_grid_(2_2).csv")))
+
+# Scale with respect to data!
+pred_grid <- pred_grid |> 
+  drop_na(oxy, temp, sal, depth) |> 
+  mutate(depth_sc = (depth - mean(d$depth)) / sd(d$depth),
+         depth_sq = depth_sc,
+         temp_sc = (temp - mean(d$temp)) / sd(d$temp),
+         temp_sq = temp_sc,
+         oxy_sc = (oxy - mean(d$oxy)) / sd(d$oxy),
+         sal_sc = (sal - mean(d$sal)) / sd(d$sal),
+         year_f = as.factor(year),
+         quarter_f = as.factor(quarter))
+```
+
+## Create mesh
+
+```{r}
+#| cache: false
+mesh <- make_mesh(d,
+                  xy_cols = c("X", "Y"),
+                  cutoff = 15)
+
+ggplot() +
+  inlabru::gg(mesh$mesh) +
+  coord_fixed() +
+  geom_point(aes(X, Y), data = d, alpha = 0.2, size = 0.5) +
+  annotate("text", -Inf, Inf, label = paste("n knots = ", mesh$mesh$n), hjust = -0.3, vjust = 3) + 
+  labs(x = "Easting (km)", y = "Northing (km)")
+
+ggsave(paste0(home, "/figures/supp/density_mesh.pdf"), width = 17, height = 17, units = "cm")
+```
+
+## Fit models
+
+```{r sad cod delta}
+startTime <- Sys.time()
+mcod_sad <- sdmTMB(cod_sad ~ 0 + year_f + quarter_f + sal_sc + temp_sc + temp_sq + depth_sc + depth_sq + breakpt(oxy_sc),
+                   data = d,
+                   mesh = mesh,
+                   family = delta_gamma(link1 = "logit", link2 = "log"),
+                   spatiotemporal = "IID", # This seems to work best with spatially varying quarter
+                   spatial = "off",
+                   spatial_varying = ~0 + quarter_f,
+                   time = "year")
+endTime <- Sys.time()
+print(endTime - startTime)
+
+sanity(mcod_sad)
+summary(mcod_sad) # check the range in relation to cutoff!
+tidy(mcod_sad, effects = "ran_pars", conf.int = TRUE)
+```
+
+```{r pel cod delta}
+startTime <- Sys.time()
+mcod_pel <- sdmTMB(cod_pel ~ 0 + year_f + quarter_f + sal_sc + temp_sc + temp_sq + depth_sc + depth_sq + breakpt(oxy_sc),
+                   data = d,
+                   mesh = mesh,
+                   family = delta_gamma(link1 = "logit", link2 = "log"),
+                   spatiotemporal = "IID",
+                   spatial = "off",
+                   spatial_varying = ~0 + quarter_f,
+                   time = "year")
+endTime <- Sys.time()
+print(endTime - startTime)
+
+sanity(mcod_pel)
+summary(mcod_pel) # check the range in relation to cutoff!
+tidy(mcod_pel, effects = "ran_pars", conf.int = TRUE)
+```
+
+```{r com cod delta}
+startTime <- Sys.time()
+mcod_com <- sdmTMB(cod_com ~ 0 + year_f + quarter_f + sal_sc + temp_sc + temp_sq + depth_sc + depth_sq + breakpt(oxy_sc),
+                   data = d,
+                   mesh = mesh,
+                   family = delta_gamma(link1 = "logit", link2 = "log"),
+                   spatiotemporal = "IID",
+                   spatial = "off",
+                   spatial_varying = ~0 + quarter_f,
+                   time = "year")
+endTime <- Sys.time()
+print(endTime - startTime)
+
+sanity(mcod_com)
+summary(mcod_com) # check the range in relation to cutoff!
+tidy(mcod_com, effects = "ran_pars", conf.int = TRUE)
+```
+
+## Residuals
+
+```{r residuals sad}
+# TODO: MCMC residuals
+# See MI paper
+d$res_sad_m1 <- residuals(mcod_sad, model = 1)
+d$res_sad_m2 <- residuals(mcod_sad, model = 2)
+
+p1 <- ggplot(d, aes(sample = res_sad_m1)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(y = "Sample Quantiles", x = "Theoretical Quantiles", title = "Binomial") +
+  theme(aspect.ratio = 1)
+
+p2 <- ggplot(d, aes(sample = res_sad_m2)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(y = "Sample Quantiles", x = "Theoretical Quantiles", title = "Gamma") +
+  theme(aspect.ratio = 1)
+
+p1 + p2
+
+ggsave(paste0(home, "/figures/supp/qq_cod_sad_sdm.pdf"), width = 17, height = 11, units = "cm")
+```
+
+```{r residuals pel}
+# TODO: MCMC residuals
+d$res_pel_m1 <- residuals(mcod_pel, model = 1)
+d$res_pel_m2 <- residuals(mcod_pel, model = 2)
+
+p1 <- ggplot(d, aes(sample = res_pel_m1)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(y = "Sample Quantiles", x = "Theoretical Quantiles", title = "Binomial") +
+  theme(aspect.ratio = 1)
+
+p2 <- ggplot(d, aes(sample = res_pel_m2)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(y = "Sample Quantiles", x = "Theoretical Quantiles", title = "Gamma") +
+  theme(aspect.ratio = 1)
+
+p1 + p2
+
+ggsave(paste0(home, "/figures/supp/qq_cod_pel_sdm.pdf"), width = 17, height = 11, units = "cm")
+```
+
+```{r residuals com}
+# TODO: MCMC residuals
+d$res_com_m1 <- residuals(mcod_com, model = 1)
+d$res_com_m2 <- residuals(mcod_com, model = 2)
+
+p1 <- ggplot(d, aes(sample = res_com_m1)) + 
+  stat_qq() +
+  stat_qq_line() +
+  labs(y = "Sample Quantiles", x = "Theoretical Quantiles", title = "Binomial") + 
+  theme(aspect.ratio = 1)
+
+p2 <- ggplot(d, aes(sample = res_com_m2)) + 
+  stat_qq() +
+  stat_qq_line() +
+  labs(y = "Sample Quantiles", x = "Theoretical Quantiles", title = "Gamma") + 
+  theme(aspect.ratio = 1)
+
+p1 + p2
+
+ggsave(paste0(home, "/figures/supp/qq_cod_com_sdm.pdf"), width = 17, height = 11, units = "cm")
+```
+
+## Predict on grid and save
+
+```{r predict}
+#| cache: false
+#mcod_pel_pred <- predict(mcod_pel, newdata = pred_grid, type = "response")
+#mcod_sad_pred <- predict(mcod_sad, newdata = pred_grid, type = "response")
+mcod_com_pred <- predict(mcod_com, newdata = pred_grid, type = "response")
+
+# write_csv(mcod_pel_pred, paste0(home, "/output/mcod_pel_pred.csv"))
+# write_csv(mcod_sad_pred, paste0(home, "/output/mcod_sad_pred.csv"))
+write_csv(mcod_com_pred, paste0(home, "/output/pred_cod.csv"))
+```
+ 
+```{r spatial residuals}
+d_long <- d |> 
+  pivot_longer(c(#"res_sad_m1", "res_sad_m2",
+                 #"res_pel_m1", "res_pel_m2",
+                 "res_com_m1", "res_com_m2"),
+               names_to = "model", values_to = "Residuals") |> 
+  mutate(#Group = ifelse(model %in% c("res_sad_m1", "res_sad_m2"), "Saduria-cod", "Pelagic cod"),
+         Model = ifelse(model == "res_com_m1", "Binomial", "Gamma")) |> 
+  filter(is.finite(Residuals))
+  
+plot_map_fc +
+  geom_point(data = d_long, aes(X*1000, Y*1000, color = Residuals), size = 0.5) +
+  #facet_grid(Model~Group) +
+  facet_wrap(~Model) +
+  scale_color_gradient2()
+
+ggsave(paste0(home, "/figures/supp/spatial_resid_cod_com.pdf"), width = 17, height = 11, units = "cm")
+```
+
+### TODO: Plot time-varying varying
+
+```{r}
+knitr::knit_exit()
+```
+
+## Some test plots! 
+Not yet for the combined model
+
+```{r}
+mcod_pel_pred <- read_csv(paste0(home, "/output/mcod_pel_pred.csv"))
+mcod_sad_pred <- read_csv(paste0(home, "/output/mcod_sad_pred.csv"))
+
+# Pelagic cod
+long_pel <- mcod_pel_pred |>
+  filter(year == 1999) |> 
+  pivot_longer(c("zeta_s_quarter_f11", "zeta_s_quarter_f12", "zeta_s_quarter_f41", "zeta_s_quarter_f42"),
+               names_to = "field", values_to = "zeta") |> 
+  mutate(Quarter = ifelse(field %in% c("zeta_s_quarter_f11", "zeta_s_quarter_f12"), "Quarter 1", "Quarter 4"),
+         Model = ifelse(field %in% c("zeta_s_quarter_f11", "zeta_s_quarter_f41"), "Binomial", "Gamma"))
+
+plot_map +
+  geom_raster(data = long_pel, aes(X*1000, Y*1000, fill = zeta)) + 
+  facet_grid(Model~Quarter) +
+  scale_fill_viridis(option = "mako") + 
+  labs(title = "Spatially varying effect of quarter",
+       subtitle = "Cod: pelagic")
+
+ggsave(paste0(home, "/figures/supp/density_zeta_pel_cod.pdf"), width = 17, height = 17, units = "cm")
+
+# Saduria cod
+long_sad <- mcod_sad_pred |>
+  filter(year == 1999) |> 
+  pivot_longer(c("zeta_s_quarter_f11", "zeta_s_quarter_f12", "zeta_s_quarter_f41", "zeta_s_quarter_f42"),
+               names_to = "field", values_to = "zeta") |> 
+  mutate(Quarter = ifelse(field %in% c("zeta_s_quarter_f11", "zeta_s_quarter_f12"), "Quarter 1", "Quarter 4"),
+         Model = ifelse(field %in% c("zeta_s_quarter_f11", "zeta_s_quarter_f41"), "Binomial", "Gamma"))
+
+plot_map +
+  geom_raster(data = long_sad, aes(X*1000, Y*1000, fill = zeta)) + 
+  facet_grid(Model~Quarter) +
+  scale_fill_viridis(option = "mako") + 
+  labs(title = "Spatially varying effect of quarter",
+       subtitle = "Cod: pelagic")
+
+ggsave(paste0(home, "/figures/supp/density_zeta_sad_cod.pdf"), width = 17, height = 17, units = "cm")
+
+# Plot correlation between predictions
+cor(mcod_pel_pred$est1, mcod_sad_pred$est1)
+cor(mcod_pel_pred$est2, mcod_sad_pred$est2)
+```
+
+- Probably proceeed with a single cod model... the correlation between these two size groups is 0.99...
