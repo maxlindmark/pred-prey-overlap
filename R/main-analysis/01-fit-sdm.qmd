@@ -241,16 +241,22 @@ ggsave(paste0(home, "/figures/supp/qq_cod_com_sdm.pdf"), width = 17, height = 11
 ```
 
 ## Predict on grid and save
+I only predict with the combined model because predictions are very similar
+
+```{r}
+pel_pred <- predict(mcod_pel, newdata = pred_grid, type = "response")
+sad_pred <- predict(mcod_sad, newdata = pred_grid, type = "response")
+com_pred <- predict(mcod_com, newdata = pred_grid, type = "response")
+
+cor(pel_pred$est, sad_pred$est)
+```
 
 ```{r predict}
 #| cache: false
-#mcod_pel_pred <- predict(mcod_pel, newdata = pred_grid, type = "response")
-#mcod_sad_pred <- predict(mcod_sad, newdata = pred_grid, type = "response")
-mcod_com_pred <- predict(mcod_com, newdata = pred_grid, type = "response")
 
 # write_csv(mcod_pel_pred, paste0(home, "/output/mcod_pel_pred.csv"))
 # write_csv(mcod_sad_pred, paste0(home, "/output/mcod_sad_pred.csv"))
-write_csv(mcod_com_pred, paste0(home, "/output/pred_cod.csv"))
+write_csv(com_pred, paste0(home, "/output/pred_cod.csv"))
 ```
  
 ```{r spatial residuals}
@@ -269,59 +275,35 @@ plot_map_fc +
   facet_wrap(~Model) +
   scale_color_gradient2()
 
-ggsave(paste0(home, "/figures/supp/spatial_resid_cod_com.pdf"), width = 17, height = 11, units = "cm")
-```
+ggsave(paste0(home, "/figures/supp/spatial_resid_cod_com.pdf"), width = 17, height = 17, units = "cm")
 
-### TODO: Plot time-varying varying
+# Biomass density
+plot_map_fc +
+  geom_raster(data = filter(com_pred, quarter == 1), aes(X*1000, Y*1000, fill = est), size = 0.5) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Biomass density (kg/km)")
 
-```{r}
-knitr::knit_exit()
-```
+ggsave(paste0(home, "/figures/supp/biomass_dens_cod_com_q1.pdf"), width = 17, height = 17, units = "cm")
 
-## Some test plots! 
-Not yet for the combined model
+plot_map_fc +
+  geom_raster(data = filter(com_pred, quarter == 4), aes(X*1000, Y*1000, fill = est), size = 0.5) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Biomass density (kg/km)")
 
-```{r}
-mcod_pel_pred <- read_csv(paste0(home, "/output/mcod_pel_pred.csv"))
-mcod_sad_pred <- read_csv(paste0(home, "/output/mcod_sad_pred.csv"))
+ggsave(paste0(home, "/figures/supp/biomass_dens_cod_com_q4.pdf"), width = 17, height = 17, units = "cm")
 
-# Pelagic cod
-long_pel <- mcod_pel_pred |>
+# Spatially-varying quarter effect
+d_long2 <- com_pred |>
   filter(year == 1999) |> 
   pivot_longer(c("zeta_s_quarter_f11", "zeta_s_quarter_f12", "zeta_s_quarter_f41", "zeta_s_quarter_f42"),
                names_to = "field", values_to = "zeta") |> 
   mutate(Quarter = ifelse(field %in% c("zeta_s_quarter_f11", "zeta_s_quarter_f12"), "Quarter 1", "Quarter 4"),
          Model = ifelse(field %in% c("zeta_s_quarter_f11", "zeta_s_quarter_f41"), "Binomial", "Gamma"))
 
-plot_map +
-  geom_raster(data = long_pel, aes(X*1000, Y*1000, fill = zeta)) + 
+plot_map_fc +
+  geom_raster(data = d_long2, aes(X*1000, Y*1000, fill = zeta)) + 
   facet_grid(Model~Quarter) +
-  scale_fill_viridis(option = "mako") + 
-  labs(title = "Spatially varying effect of quarter",
-       subtitle = "Cod: pelagic")
+  scale_fill_viridis(option = "mako", name = "Zeta")
 
-ggsave(paste0(home, "/figures/supp/density_zeta_pel_cod.pdf"), width = 17, height = 17, units = "cm")
-
-# Saduria cod
-long_sad <- mcod_sad_pred |>
-  filter(year == 1999) |> 
-  pivot_longer(c("zeta_s_quarter_f11", "zeta_s_quarter_f12", "zeta_s_quarter_f41", "zeta_s_quarter_f42"),
-               names_to = "field", values_to = "zeta") |> 
-  mutate(Quarter = ifelse(field %in% c("zeta_s_quarter_f11", "zeta_s_quarter_f12"), "Quarter 1", "Quarter 4"),
-         Model = ifelse(field %in% c("zeta_s_quarter_f11", "zeta_s_quarter_f41"), "Binomial", "Gamma"))
-
-plot_map +
-  geom_raster(data = long_sad, aes(X*1000, Y*1000, fill = zeta)) + 
-  facet_grid(Model~Quarter) +
-  scale_fill_viridis(option = "mako") + 
-  labs(title = "Spatially varying effect of quarter",
-       subtitle = "Cod: pelagic")
-
-ggsave(paste0(home, "/figures/supp/density_zeta_sad_cod.pdf"), width = 17, height = 17, units = "cm")
-
-# Plot correlation between predictions
-cor(mcod_pel_pred$est1, mcod_sad_pred$est1)
-cor(mcod_pel_pred$est2, mcod_sad_pred$est2)
+ggsave(paste0(home, "/figures/supp/zeta_cod_com.pdf"), width = 17, height = 17, units = "cm")
 ```
-
-- Probably proceeed with a single cod model... the correlation between these two size groups is 0.99...
