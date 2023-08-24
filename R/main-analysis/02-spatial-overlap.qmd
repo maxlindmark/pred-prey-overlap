@@ -414,7 +414,7 @@ plot_map_fc +
   geom_raster(data = cod_pel |> filter(year < 2020),
               aes(X*1000, Y*1000, fill = cod_spr_ovr)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Sprat overlap (tonnes)", trans = "sqrt")
+  scale_fill_viridis(name = "Cod-Sprat overlap", trans = "sqrt")
 
 ggsave(paste0(home, "/figures/spr_overlap_space.pdf"), width = 17, height = 17, units = "cm")
 
@@ -422,7 +422,7 @@ plot_map_fc +
   geom_raster(data = cod_pel |> filter(year < 2020),
               aes(X*1000, Y*1000, fill = cod_spr_ovr_sd)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Sprat overlap (tonnes)", trans = "sqrt")
+  scale_fill_viridis(name = "Cod-Sprat overlap", trans = "sqrt")
 
 ggsave(paste0(home, "/figures/supp/spr_overlap_space_sd.pdf"), width = 17, height = 17, units = "cm")
 
@@ -443,7 +443,7 @@ plot_map_fc +
   geom_raster(data = cod_pel |> filter(year < 2020),
               aes(X*1000, Y*1000, fill = cod_her_ovr)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Herring overlap (tonnes)", trans = "sqrt")
+  scale_fill_viridis(name = "Cod-Herring overlap", trans = "sqrt")
 
 ggsave(paste0(home, "/figures/her_overlap_space.pdf"), width = 17, height = 17, units = "cm")
 
@@ -451,7 +451,7 @@ plot_map_fc +
   geom_raster(data = cod_pel |> filter(year < 2020),
               aes(X*1000, Y*1000, fill = cod_her_ovr_sd)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Herring overlap (tonnes)", trans = "sqrt")
+  scale_fill_viridis(name = "Cod-Herring overlap", trans = "sqrt")
 
 ggsave(paste0(home, "/figures/supp/her_overlap_space_sd.pdf"), width = 17, height = 17, units = "cm")
 
@@ -472,7 +472,7 @@ plot_map_fc +
   geom_raster(data = cod_ben |> filter(year < 2020 & quarter == 4), # TODO: or q1??
               aes(X*1000, Y*1000, fill = cod_sad_ovr)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Saduria overlap (tonnes)", trans = "sqrt")
+  scale_fill_viridis(name = "Cod-Saduria overlap", trans = "sqrt")
 
 ggsave(paste0(home, "/figures/sad_overlap_space_q4.pdf"), width = 17, height = 17, units = "cm")
 
@@ -480,7 +480,7 @@ plot_map_fc +
   geom_raster(data = cod_ben |> filter(year < 2020 & quarter == 1),
               aes(X*1000, Y*1000, fill = cod_sad_ovr)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Saduria overlap (tonnes)", trans = "sqrt")
+  scale_fill_viridis(name = "Cod-Saduria overlap", trans = "sqrt")
 
 ggsave(paste0(home, "/figures/supp/sad_overlap_space_q1.pdf"), width = 17, height = 17, units = "cm")
 
