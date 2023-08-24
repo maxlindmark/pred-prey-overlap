@@ -20,8 +20,15 @@ execute:
 ## Load libraries
 
 ```{r}
+library(sdmTMB)
+library(tidylog)
 library(tidyverse)
 library(mapplots)
+
+# Source code for map plots
+# You need: # devtools::install_github("seananderson/ggsidekick") # not on CRAN; library(ggsidekick)
+devtools::source_url("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/R/functions/map-plot.R")
+options(ggplot2.continuous.colour = "viridis")
 
 # Set path
 home <- here::here()
@@ -29,13 +36,13 @@ home <- here::here()
 
 ## Read data
 
-I downloaded these data on Aug 23rd 2023. I see lots of data missing. Also there is a new format. Here's a test script to prepare those data.
+I downloaded these data on Aug 24th 2023. I see lots of data missing. Also there is a new format. Here's a test script to prepare those data.
 
 ```{r read data}
-fi <- read.csv(paste0(home, "/data/stomach/StomachContent_0823355060/File_information.csv"))
-hi <- read.csv(paste0(home, "/data/stomach/StomachContent_0823355060/HaulInformation.csv"))
-pred <- read.csv(paste0(home, "/data/stomach/StomachContent_0823355060/PredatorInformation.csv"))
-prey <- read.csv(paste0(home, "/data/stomach/StomachContent_0823355060/PreyInformation.csv"))
+fi <- read.csv(paste0(home, "/data/stomach/StomachContent_0824171550/File_information.csv"))
+hi <- read.csv(paste0(home, "/data/stomach/StomachContent_0824171550/HaulInformation.csv"))
+pred <- read.csv(paste0(home, "/data/stomach/StomachContent_0824171550/PredatorInformation.csv"))
+prey <- read.csv(paste0(home, "/data/stomach/StomachContent_0824171550/PreyInformation.csv"))
 ```
 
 Have a look at the data...
@@ -130,17 +137,97 @@ d <- d |>
 
 # Summarize prey weights by predator ID after making the data wide rather than long
 # This is for the presences, so we can go ahead and filter
+t <- d |> filter(Weight == 0) # TODO: how can there be 0 weights?
+
+# How can there be so few predators with sprat (and other common prey???)
+tt <- d |> filter(AphiaIDPrey == "126425")
+
 prey_sum <- d |>
   filter(common_prey_name %in% c("sprat", "herring", "saduria")) |> 
-  dplyr::select(unique_FishID, common_prey_name, Weight) |> 
-  pivot_wider(names_from = common_prey_name, values_from = Weight) #|> 
+  drop_na(Weight) |> 
+  filter(Weight > 0) |> 
+  group_by(unique_FishID, common_prey_name) |> 
+  summarise(tot_weight = sum(Weight)) |> 
+  ungroup() |> 
+  pivot_wider(names_from = common_prey_name, values_from = tot_weight, values_fill = 0) #|> 
   # summarise(tot_sprat = sum(Weight),
   #           tot_herring = sum(Weight),
   #           tot_herring = sum(Weight))
 
-# Need to add in empty stomachs: make an id and left join distinct version
+prey_sum
 
+# Now add in the haul and predator information to this data
+prey_sum <- prey_sum |> left_join(pred, by = "unique_FishID")
 
+# Need to add in empty stomachs by filtering the IDs that are not in this dataset already. Do it from "pred" because d contains multiple rows per predator
+# NOTE! Because we used pivot_wider above with values_fill = 0, it means we now have the same sets of IDs for all species. This filter will therefore contain all the predators that don't have sprat, herring or saduria, or have any 0 weights 
+d_empty <- pred |> filter(!unique_FishID %in% prey_sum$unique_FishID)
+
+unique(is.na(prey_sum))
+prey_sum <- prey_sum |> bind_rows(d_empty)
+unique(is.na(prey_sum))
+prey_sum |> filter(unique_FishID == "1996_3_85_4")
+
+# Now we have NA weights of sprat, saduria and herring. Replace these with 0, because they are simply missing in stomachs, not NA
+# Fix that and trim the data set slightly
+dd <- prey_sum |> 
+  mutate(sprat = replace_na(sprat, 0),
+         herring = replace_na(herring, 0),
+         saduria = replace_na(saduria, 0)) |> 
+  dplyr::select(-tblUploadID, -tblHaulID, -tblPredatorInformationID, -Ship, -Gear,
+                -AphiaIDPredator, -Number, -MeasurementIncrement, -Age, -MaturityScale,
+                -MaturityStage, -PreservationMethod, -Regurgitated, -StomachFullness,
+                 -FullStomWgt, -EmptyStomWgt, -StomachEmpty, -GenSamp, -Notes,
+                -HaulLat, -HaulLong, -Code)
+
+unique(is.na(dd))
+```
+
+## Calculate new variables and add depth (and potentially other co-variates)
+
+```{r}
+# Add UTM cols
+dd <- dd |> add_utm_columns(ll_names = c("ShootLong", "ShootLat"), utm_crs = 32633)
+
+dd <- dd |> 
+  mutate(sprat_fr = sprat / IndWgt,
+         herring_fr = herring / IndWgt,
+         saduria_fr = saduria / IndWgt)
+
+# Check distribution of feeding ratios
+dd |> 
+  pivot_longer(c("sprat_fr", "herring_fr", "saduria_fr")) |> 
+  ggplot(aes(value)) + 
+  geom_histogram() +
+  facet_wrap(~name, ncol = 1, scales = "free")
+
+# What is the proportion of empty stomachs?
+dd %>% 
+  pivot_longer(c("sprat_fr", "herring_fr", "saduria_fr")) |> 
+  group_by(name) |> 
+  summarise(prop_empty = sum(value == 0)/n(), 
+            prop_not_empty = sum(value != 0)/n())
+
+dd_pres <- dd |> 
+  mutate(pres_spr = ifelse(sprat_fr > 0, "1", "0"),
+         pres_her = ifelse(herring_fr > 0, "1", "0"),
+         pres_sad = ifelse(saduria_fr > 0, "1", "0")) |> 
+  pivot_longer(c("pres_spr", "pres_her", "pres_sad"),
+               names_to = "prey", values_to = "fr")
+
+ggplot(dd_pres, aes(fr)) + 
+  geom_histogram(stat = "count") +
+  facet_wrap(~prey, ncol = 1, scales = "free")
+
+ggplot(swe_coast_proj) + 
+  xlim(xmin2, xmax2) +
+  ylim(ymin2, ymax2) +
+  labs(x = "Longitude", y = "Latitude") +
+  geom_sf(size = 0.3) + 
+  theme_facet_map() +
+  geom_point(data = dd_pres, aes(X*1000, Y*1000, color = fr), size = 0.5) +
+  facet_grid(prey ~ Year) + 
+  theme(legend.position = "bottom")
 ```
 
 ## Save data for analysis
@@ -148,11 +235,4 @@ prey_sum <- d |>
 ```{r}
 
 ```
-
-
-
-
-
-
-
 

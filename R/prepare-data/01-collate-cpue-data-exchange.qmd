@@ -1473,7 +1473,8 @@ dat_full <- left_join(dat, env_dat, by = c("month_year", "lon", "lat"))
 
 ```{r add coords}
 # Add UTM coords
-dat_full <- dat_full |> add_utm_columns(ll_names = c("lon", "lat"))
+dat_full <- dat_full |> add_utm_columns(ll_names = c("lon", "lat"),
+                                        utm_crs = 32633)
 ```
 
 ## Save data
