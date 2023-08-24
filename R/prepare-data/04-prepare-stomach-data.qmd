@@ -1,0 +1,158 @@
+---
+title: "Prepare stomach content data"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format: 
+  html:
+    embed-resources: true
+    fig-width: 8
+    #fig-asp: 0.618
+knitr: 
+  opts_chunk:
+    fig.align: center
+editor: source
+execute: 
+  echo: true
+  eval: true
+  cache: false
+---
+
+## Load libraries
+
+```{r}
+library(tidyverse)
+library(mapplots)
+
+# Set path
+home <- here::here()
+```
+
+## Read data
+
+I downloaded these data on Aug 23rd 2023. I see lots of data missing. Also there is a new format. Here's a test script to prepare those data.
+
+```{r read data}
+fi <- read.csv(paste0(home, "/data/stomach/StomachContent_0823355060/File_information.csv"))
+hi <- read.csv(paste0(home, "/data/stomach/StomachContent_0823355060/HaulInformation.csv"))
+pred <- read.csv(paste0(home, "/data/stomach/StomachContent_0823355060/PredatorInformation.csv"))
+prey <- read.csv(paste0(home, "/data/stomach/StomachContent_0823355060/PreyInformation.csv"))
+```
+
+Have a look at the data...
+
+```{r quick glimpse}
+names(fi)
+names(hi) # Unsure what this is: unique(hi$tblHaulID)
+names(pred)
+names(prey)
+
+# There is no pdf when I downloaded the data, but one can view the data description in online: http://datsu.ices.dk/web/selRep.aspx?Dataset=157
+
+unique(pred$StomachEmpty)
+unique(pred$StomachFullness)
+```
+
+## Join the different datasets
+
+```{r join datasets}
+unique(is.na(hi))
+unique(is.na(pred))
+unique(is.na(prey))
+
+# Haul ID:
+hi <- hi |> 
+  mutate(haul_id = paste(Year, Month, StationNumber, HaulNo, sep = "_"))
+
+# Check it's unique; seems so!
+hi |> group_by(haul_id) |> mutate(n = n()) |> ungroup() |> distinct(n)
+
+# Add it to the predator data
+pred <- pred |> 
+  mutate(haul_id = paste(Year, Month, StationNumber, HaulNo, sep = "_"))
+
+# Add in haul information to predator data. First delete some common columns but not the haul_id which we need to join
+#dropcols <- intersect(colnames(hi), colnames(d))[-length(intersect(colnames(hi), colnames(d)))]
+dropcols <- intersect(colnames(hi), colnames(pred))[! intersect(colnames(hi), colnames(pred)) == "haul_id"]
+
+pred <- pred |> left_join(hi |> dplyr::select(-all_of(dropcols)), by = "haul_id")
+
+# Add lat and lon based on ices rectangle if it's missing, and add new column of the source of the coordinates. We will use Shoot-coordinates because there are NAs in the Haul-coordinates
+# d |>
+#   dplyr::select("ShootLat", "ShootLong", "HaulLat", "HaulLong") |> 
+#   is.na() |> 
+#   unique()
+
+# In the current data set coordinates are all present.
+# d |> mutate(coordinatesSource = ifelse(is.na(ShootLat, ShootLat))) ... to be continued
+
+# Now add in predator information to prey and store in new df. First create a predator fish ID that is unique across the whole dataset
+pred |>
+  mutate("unique_FishID" = paste(Year, Month, HaulNo, FishID, sep = "_")) |>
+  group_by(unique_FishID) |>
+  mutate(n = n()) |>
+  ungroup() |>
+  distinct(n)
+
+# Looks good. Add it to the datasets
+pred <- pred |>
+  mutate("unique_FishID" = paste(Year, Month, HaulNo, FishID, sep = "_"))
+
+prey <- prey |>
+  mutate("unique_FishID" = paste(Year, Month, HaulNo, FishID, sep = "_"))
+
+# Join!
+dropcols <- intersect(colnames(pred), colnames(prey))[! intersect(colnames(pred), colnames(prey)) == "unique_FishID"]
+ 
+d <- prey |> left_join(pred |> dplyr::select(-all_of(dropcols)), by = "unique_FishID")
+```
+
+## Explore data (not done yet, see old scripts for example figures)
+
+```{r}
+
+```
+
+## Summarize data
+Until this point, we have all prey for every predator as well as the haul information. Now we will go ahead and summaries the weight of specific prey for each predator, and then join back the other information. We want a dataframe will haul and predator information, and one column each for the weight of the three prey species
+
+```{r}
+# Group by predator ID and summarize total weight of sprat, herring and saduria
+# First find common name: https://datras.ices.dk/Data_products/qryspec.aspx
+# sprat = 126425, herring = 126417, saduria = 119034 
+
+d <- d |> 
+  mutate(common_prey_name = NA,
+         common_prey_name = ifelse(AphiaIDPrey == 126425, "sprat", common_prey_name),
+         common_prey_name = ifelse(AphiaIDPrey == 126417, "herring", common_prey_name),
+         common_prey_name = ifelse(AphiaIDPrey == 119034, "saduria", common_prey_name))
+
+#pred |> group_by(unique_FishID) |> mutate(n = n()) |> ungroup() |> distinct(n)
+
+# Summarize prey weights by predator ID after making the data wide rather than long
+# This is for the presences, so we can go ahead and filter
+prey_sum <- d |>
+  filter(common_prey_name %in% c("sprat", "herring", "saduria")) |> 
+  dplyr::select(unique_FishID, common_prey_name, Weight) |> 
+  pivot_wider(names_from = common_prey_name, values_from = Weight) #|> 
+  # summarise(tot_sprat = sum(Weight),
+  #           tot_herring = sum(Weight),
+  #           tot_herring = sum(Weight))
+
+# Need to add in empty stomachs: make an id and left join distinct version
+
+
+```
+
+## Save data for analysis
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
