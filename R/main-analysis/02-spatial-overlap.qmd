@@ -89,8 +89,11 @@ density_saduria <- terra::extract(saduria_latlon, cod_pred %>% dplyr::select(lon
 
 cod_pred$density_saduria <- density_saduria$FWBiomassm_raster_19812019presHighweightcor_no0_newZi
 
-ggplot(cod_pred, aes(X, Y, fill = density_saduria))  + 
-  geom_raster()
+plot_map_fc + 
+  geom_raster(data = cod_pred |> filter(year == 1999 & quarter == 4), aes(X*1000, Y*1000, fill = density_saduria)) +
+  scale_fill_viridis(trans = "sqrt", name = "Saduria biomass density")
+
+ggsave(paste0(home, "/figures/supp/spatial_saduria_biomass.pdf"), width = 17, height = 17, units = "cm")
 ```
 
 Pelagics
@@ -353,6 +356,7 @@ Remember, pelagic data is from Q4 while saduria data is not resolved on a finer 
 # Pelagics
 # Calculate overlap indices in space
 cod_pel <- cod_pred |> 
+  filter(quarter == 4) |> 
   group_by(year, quarter) |> 
   mutate(# sprat
          cod_spr_ovr = asymmalpha_overlapspfn(pred = est, prey = biomass_spr),
@@ -365,7 +369,6 @@ cod_pel <- cod_pred |>
   
 # Calculate summarised overlaps
 cod_pel_sum <- cod_pel |> 
-  filter(quarter == 4) |> 
   group_by(year) |> 
   summarise(cod_spr_ovr_tot = asymmalpha_overlapspfn_tot(pred = est, prey = biomass_spr),
             cod_spr_ovr_sd_tot = asymmalpha_overlapspfn_tot(pred = est, prey = biomass_spr_sd),
@@ -414,7 +417,10 @@ plot_map_fc +
   geom_raster(data = cod_pel |> filter(year < 2020),
               aes(X*1000, Y*1000, fill = cod_spr_ovr)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Sprat overlap", trans = "sqrt")
+  scale_fill_viridis(trans = "sqrt", name = "Cod-Sprat overlap (ICES Rect.)",
+                         # trim extreme high values to make spatial variation more visible
+                     na.value = "yellow", limits = c(0, quantile(filter(cod_pel, year < 2020)$cod_spr_ovr, 0.999))) +
+  labs(caption = paste("maximum estimated overlap =", round(max(filter(cod_pel, year < 2020)$cod_spr_ovr), digits = 3)))
 
 ggsave(paste0(home, "/figures/spr_overlap_space.pdf"), width = 17, height = 17, units = "cm")
 
@@ -443,7 +449,10 @@ plot_map_fc +
   geom_raster(data = cod_pel |> filter(year < 2020),
               aes(X*1000, Y*1000, fill = cod_her_ovr)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Herring overlap", trans = "sqrt")
+  scale_fill_viridis(trans = "sqrt", name = "Cod-Herring overlap (ICES Rect.)",
+                         # trim extreme high values to make spatial variation more visible
+                     na.value = "yellow", limits = c(0, quantile(filter(cod_pel, year < 2020)$cod_her_ovr, 0.999))) +
+  labs(caption = paste("maximum estimated overlap =", round(max(filter(cod_pel, year < 2020)$cod_her_ovr), digits = 3)))
 
 ggsave(paste0(home, "/figures/her_overlap_space.pdf"), width = 17, height = 17, units = "cm")
 
@@ -516,13 +525,15 @@ ggplot(data = cod_pel_sum_wide, aes(year, value)) +
 ggsave(paste0(home, "/figures/pelagic_overlap.pdf"), width = 17, height = 17, units = "cm")
 
 # Saduria
-ggplot(data = cod_ben_sum, aes(year, cod_sad_ovr_tot)) +
+cod_ben_sum |> 
+  mutate(quart_lab = ifelse(quarter == 1, "Quarter 1", "Quarter 4")) |> 
+  ggplot(aes(year, cod_sad_ovr_tot)) +
   geom_point() +
   geom_line() +
   labs(x = "Year", y = "Asymmetrical alpha overlap index") +
   geom_smooth(method = "gam", formula = y~s(x, k = 4), color = "tomato3") +
-  facet_wrap(~quarter) + 
+  facet_wrap(~quart_lab) + 
   theme(aspect.ratio = 1)
 
-ggsave(paste0(home, "/figures/saduria_overlap.pdf"), width = 17, height = 17, units = "cm")
+ggsave(paste0(home, "/figures/saduria_overlap.pdf"), width = 17, height = 11, units = "cm")
 ```

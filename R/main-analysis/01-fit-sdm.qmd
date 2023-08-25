@@ -275,20 +275,26 @@ plot_map_fc +
   facet_wrap(~Model) +
   scale_color_gradient2()
 
-ggsave(paste0(home, "/figures/supp/spatial_resid_cod_com.pdf"), width = 17, height = 17, units = "cm")
+ggsave(paste0(home, "/figures/supp/spatial_resid_cod_com.pdf"), width = 17, height = 11, units = "cm")
 
 # Biomass density
 plot_map_fc +
-  geom_raster(data = filter(com_pred, quarter == 1), aes(X*1000, Y*1000, fill = est), size = 0.5) +
+  geom_raster(data = filter(com_pred, quarter == 1), aes(X*1000, Y*1000, fill = est)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(trans = "sqrt", name = "Biomass density (kg/km)")
+  scale_fill_viridis(trans = "sqrt", name = "Biomass density (kg/km)",
+                         # trim extreme high values to make spatial variation more visible
+                     na.value = "yellow", limits = c(0, quantile(filter(com_pred, quarter == 1)$est, 0.999))) +
+  labs(caption = paste("maximum estimated biomass density =", round(max(filter(com_pred, quarter == 1)$est))))
 
 ggsave(paste0(home, "/figures/supp/biomass_dens_cod_com_q1.pdf"), width = 17, height = 17, units = "cm")
 
 plot_map_fc +
-  geom_raster(data = filter(com_pred, quarter == 4), aes(X*1000, Y*1000, fill = est), size = 0.5) +
+  geom_raster(data = filter(com_pred, quarter == 4), aes(X*1000, Y*1000, fill = est)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(trans = "sqrt", name = "Biomass density (kg/km)")
+  scale_fill_viridis(trans = "sqrt", name = "Biomass density (kg/km)",
+                         # trim extreme high values to make spatial variation more visible
+                     na.value = "yellow", limits = c(0, quantile(filter(com_pred, quarter == 4)$est, 0.999))) +
+  labs(caption = paste("maximum estimated biomass density =", round(max(filter(com_pred, quarter == 4)$est))))
 
 ggsave(paste0(home, "/figures/supp/biomass_dens_cod_com_q4.pdf"), width = 17, height = 17, units = "cm")
 
