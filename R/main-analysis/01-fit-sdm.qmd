@@ -309,7 +309,7 @@ d_long2 <- com_pred |>
 plot_map_fc +
   geom_raster(data = d_long2, aes(X*1000, Y*1000, fill = zeta)) + 
   facet_grid(Model~Quarter) +
-  scale_fill_viridis(option = "mako", name = "Zeta")
+  scale_fill_gradient2(name = "Zeta")
 
 ggsave(paste0(home, "/figures/supp/zeta_cod_com.pdf"), width = 17, height = 17, units = "cm")
 ```

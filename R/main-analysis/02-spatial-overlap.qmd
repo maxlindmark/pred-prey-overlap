@@ -418,8 +418,9 @@ plot_map_fc +
               aes(X*1000, Y*1000, fill = cod_spr_ovr)) +
   facet_wrap(~year) + 
   scale_fill_viridis(trans = "sqrt", name = "Cod-Sprat overlap (ICES Rect.)",
+                     option = "mako",
                          # trim extreme high values to make spatial variation more visible
-                     na.value = "yellow", limits = c(0, quantile(filter(cod_pel, year < 2020)$cod_spr_ovr, 0.999))) +
+                     na.value = "#DEF5E5FF", limits = c(0, quantile(filter(cod_pel, year < 2020)$cod_spr_ovr, 0.999))) +
   labs(caption = paste("maximum estimated overlap =", round(max(filter(cod_pel, year < 2020)$cod_spr_ovr), digits = 3)))
 
 ggsave(paste0(home, "/figures/spr_overlap_space.pdf"), width = 17, height = 17, units = "cm")
@@ -428,7 +429,8 @@ plot_map_fc +
   geom_raster(data = cod_pel |> filter(year < 2020),
               aes(X*1000, Y*1000, fill = cod_spr_ovr_sd)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Sprat overlap", trans = "sqrt")
+  scale_fill_viridis(name = "Cod-Sprat overlap", trans = "sqrt",
+                     option = "mako")
 
 ggsave(paste0(home, "/figures/supp/spr_overlap_space_sd.pdf"), width = 17, height = 17, units = "cm")
 
@@ -450,8 +452,9 @@ plot_map_fc +
               aes(X*1000, Y*1000, fill = cod_her_ovr)) +
   facet_wrap(~year) + 
   scale_fill_viridis(trans = "sqrt", name = "Cod-Herring overlap (ICES Rect.)",
+                     option = "mako",
                          # trim extreme high values to make spatial variation more visible
-                     na.value = "yellow", limits = c(0, quantile(filter(cod_pel, year < 2020)$cod_her_ovr, 0.999))) +
+                     na.value = "#DEF5E5FF", limits = c(0, quantile(filter(cod_pel, year < 2020)$cod_her_ovr, 0.999))) +
   labs(caption = paste("maximum estimated overlap =", round(max(filter(cod_pel, year < 2020)$cod_her_ovr), digits = 3)))
 
 ggsave(paste0(home, "/figures/her_overlap_space.pdf"), width = 17, height = 17, units = "cm")
@@ -460,7 +463,10 @@ plot_map_fc +
   geom_raster(data = cod_pel |> filter(year < 2020),
               aes(X*1000, Y*1000, fill = cod_her_ovr_sd)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Herring overlap", trans = "sqrt")
+  scale_fill_viridis(trans = "sqrt", name = "Cod-Herring overlap (ICES Rect.)",
+                     option = "mako",
+                         # trim extreme high values to make spatial variation more visible
+                     na.value = "black", limits = c(0, quantile(filter(cod_pel, year < 2020)$cod_her_ovr_sd, 0.999)))
 
 ggsave(paste0(home, "/figures/supp/her_overlap_space_sd.pdf"), width = 17, height = 17, units = "cm")
 
@@ -478,10 +484,10 @@ ggsave(paste0(home, "/figures/supp/her_overlap_cog_sd.pdf"), width = 17, height 
 
 # Saduria
 plot_map_fc + 
-  geom_raster(data = cod_ben |> filter(year < 2020 & quarter == 4), # TODO: or q1??
+  geom_raster(data = cod_ben |> filter(year < 2020 & quarter == 4),
               aes(X*1000, Y*1000, fill = cod_sad_ovr)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Saduria overlap", trans = "sqrt")
+  scale_fill_viridis(name = "Cod-Saduria overlap", trans = "sqrt", option = "mako")
 
 ggsave(paste0(home, "/figures/sad_overlap_space_q4.pdf"), width = 17, height = 17, units = "cm")
 
@@ -489,7 +495,7 @@ plot_map_fc +
   geom_raster(data = cod_ben |> filter(year < 2020 & quarter == 1),
               aes(X*1000, Y*1000, fill = cod_sad_ovr)) +
   facet_wrap(~year) + 
-  scale_fill_viridis(name = "Cod-Saduria overlap", trans = "sqrt")
+  scale_fill_viridis(name = "Cod-Saduria overlap", trans = "sqrt", option = "mako")
 
 ggsave(paste0(home, "/figures/supp/sad_overlap_space_q1.pdf"), width = 17, height = 17, units = "cm")
 
@@ -519,7 +525,7 @@ ggplot(data = cod_pel_sum_wide, aes(year, value)) +
   geom_line() + 
   labs(x = "Year", y = "Asymmetrical alpha overlap index") +
   facet_grid(Scale ~ Species) +
-  geom_smooth(method = "gam", formula = y~s(x, k = 4), color = "tomato3") + 
+  geom_smooth(method = "gam", formula = y~s(x, k = 4), color = "tomato2") + 
   theme(aspect.ratio = 1)
 
 ggsave(paste0(home, "/figures/pelagic_overlap.pdf"), width = 17, height = 17, units = "cm")
@@ -531,7 +537,7 @@ cod_ben_sum |>
   geom_point() +
   geom_line() +
   labs(x = "Year", y = "Asymmetrical alpha overlap index") +
-  geom_smooth(method = "gam", formula = y~s(x, k = 4), color = "tomato3") +
+  geom_smooth(method = "gam", formula = y~s(x, k = 4), color = "tomato2") +
   facet_wrap(~quart_lab) + 
   theme(aspect.ratio = 1)
 
