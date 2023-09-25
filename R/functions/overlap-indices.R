@@ -20,7 +20,7 @@ loc_collocspfn_tot <- function(prey, pred) {
   sum((p_prey*p_pred)/(sqrt(sum(p_prey^2, na.rm = T))* sqrt(sum(p_pred^2, na.rm = T))))
 }
 
-# Asymmetrical alpha
+# Asymmetrical alpha # ML: think this is wrong! should be a squared term in the numerator??
 asymmalpha_overlapspfn <-function(prey, pred){
   p_prey <- prey/sum(prey, na.rm = T)
   p_pred <- pred/sum(pred, na.rm = T)
@@ -32,3 +32,9 @@ asymmalpha_overlapspfn_tot <-function(prey, pred){
   p_pred <- pred/sum(pred, na.rm = T)
   sum((p_pred*p_prey)/sum(p_prey^2, na.rm = T))
 }
+
+# Biomass weighted overlap (scaled)
+thorson_overlapspfn <- function(prey, pred) {
+  (prey/max(prey, na.rm = T)) * (pred/max(pred, na.rm = T))/sum(prey/max(prey, na.rm = T), na.rm = T)
+}
+
