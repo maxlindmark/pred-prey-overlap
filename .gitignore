@@ -55,8 +55,14 @@ data/substrate_tif/
 
 data/clean/catch_by_length.csv
 
+# Reports
+WKSPATIAL - Report of the Workshop on Spatial Analyses for the Baltic Sea_2015.pdf
+
 # Output
 output/
+
+# Data
+data/
 
 # Supp figures
 figures/supp/cpue_oxygen_rasters/
