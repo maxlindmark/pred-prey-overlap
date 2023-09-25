@@ -1,0 +1,865 @@
+---
+title: "Fit stomach content models"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format: 
+  html:
+    page-layout: full
+    embed-resources: true
+knitr: 
+  opts_chunk:
+    fig.align: center
+    out-width: 80%
+editor: source
+execute: 
+  echo: true
+  eval: true
+  cache: true
+---
+
+## Load libraries
+
+```{r libs}
+#| message: false
+#| warning: false
+#| cache: false
+
+# Load libraries, install if needed
+pkgs <- c("tidyverse", "tidylog", "devtools", "sdmTMB", "sdmTMBextra", "terra", "mapplots",
+          "viridis", "visreg", "modelr", "future", "kableExtra") 
+
+if(length(setdiff(pkgs,rownames(installed.packages()))) > 0){
+
+    install.packages(setdiff(pkgs, rownames(installed.packages())), dependencies = T)
+  
+  }
+
+invisible(lapply(pkgs, library, character.only = T))
+
+# Import some plotting functions
+# Source code for map plots
+# You need: # devtools::install_github("seananderson/ggsidekick") # not on CRAN; library(ggsidekick)
+devtools::source_url("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/R/functions/map-plot.R")
+options(ggplot2.continuous.colour = "viridis")
+
+# devtools::install_github("seananderson/ggsidekick") # not on CRAN 
+library(ggsidekick)
+theme_set(theme_sleek())
+
+# Set path
+home <- here::here()
+
+# For crossvalidation: paralell processing
+plan(multisession)
+
+set.seed(99) 
+```
+
+```{r load cache}
+# To load entire cache in interactive r session, do: 
+# qwraps2::lazyload_cache_dir(path = paste0(home, "/R/main-analysis/03-fit-diet-models_cache/html"))
+```
+
+Read old and new data, combine!
+
+```{r}
+#| message: false
+#| warning: false
+
+df <- read_csv(paste0(home, "/data/clean/stomachs.csv")) |> 
+  mutate(depth_sc = (depth - mean(depth))/sd(depth),
+         year_f = as.factor(year),
+         month_f = as.factor(month),
+         ices_rect = as.factor(ices_rect),
+         pred_length_sc = (pred_length - mean(pred_length)) / sd(pred_length)) |> 
+  filter(pred_length > 10) |> 
+  filter(FR_spr < 0.4) |> # Check this by year... 
+  filter(FR_sad < 0.4) |> 
+  filter(FR_her < 0.4)
+
+# Read the prediction grid...
+pred_grid <- bind_rows(read_csv(paste0(home, "/data/clean/pred_grid_(1_2).csv")),
+                       read_csv(paste0(home, "/data/clean/pred_grid_(2_2).csv")))
+
+# Scale with respect to data!
+df |> group_by(month) |> summarise(n = n()) |> arrange(desc(n))
+
+pred_grid <- pred_grid |> 
+  drop_na(oxy, temp, sal, depth) |> 
+  filter(quarter == 4) |> # Not needed in theory for saduria...
+  mutate(depth_sc = (depth - mean(df$depth)) / sd(df$depth),
+         year_f = as.factor(year),
+         month_f = as.factor(3),
+         year = as.integer(year),
+         pred_length_sc = 0,
+         ices_rect = as.factor(ices_rect)) |> 
+  droplevels()
+```
+
+# Plot data!
+
+```{r}
+#| message: false
+#| warning: false
+
+df |> 
+  pivot_longer(c(FR_spr, FR_her, FR_sad)) |> 
+  ggplot(aes(year, value)) +
+  geom_jitter(height = 0, alpha = 0.5) + 
+  coord_cartesian(ylim = c(0, 0.1)) +
+  facet_wrap(~name, ncol = 1) +
+  geom_smooth()
+```
+
+Set up a mesh
+
+```{r}
+#| message: false
+#| warning: false
+
+mesh <- make_mesh(df, c("X", "Y"), cutoff = 6)
+
+ggplot() +
+  inlabru::gg(mesh$mesh) +
+  coord_fixed() +
+  geom_point(aes(X, Y), data = df, alpha = 0.2, size = 0.5) +
+  annotate("text", -Inf, Inf, label = paste("n knots = ", mesh$mesh$n), hjust = -0.3, vjust = 3) + 
+  labs(x = "Easting (km)", y = "Northing (km)")
+```
+
+# Spatial and temporal cross validation, and AIC, to compare spatial vs non spatial models
+
+## 5-fold spatial cross validation & AIC to compare two models: spatial fields or ices rectangle as random effects
+
+```{r spatial cross val}
+# Set up spatial clusters
+clust <- kmeans(df[, c("X", "Y")], 5)$cluster
+
+# Plot
+df$clust_id <- clust
+
+plot_map +
+  geom_point(data = df, aes(X*1000, Y*1000, color = as.factor(clust_id))) +
+  scale_color_viridis(discrete = TRUE) + 
+  geom_sf(size = 0.1)
+
+# Sprat
+# ICES as a random effects
+spr_space_1_cv <- sdmTMB_cv(
+  FR_spr ~ 0 + year_f + depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect),
+  data = df,
+  mesh = mesh,
+  spatial = "off",
+  family = tweedie(link = "log"),
+  fold_ids = clust,
+  k_folds = length(unique(clust))
+)
+
+# Spatial random field
+spr_space_2_cv <- sdmTMB_cv(
+  FR_spr ~ 0 + year_f + depth_sc + s(pred_length_sc, k=3) + (1|month_f),
+  data = df,
+  mesh = mesh,
+  spatial = "on",
+  family = tweedie(link = "log"),
+  fold_ids = clust,
+  k_folds = length(unique(clust))
+)
+
+
+# Herring
+# ICES as a random effects
+her_space_1_cv <- sdmTMB_cv(
+  FR_her ~ 0 + year_f + depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect),
+  data = df,
+  mesh = mesh,
+  spatial = "off",
+  family = tweedie(link = "log"),
+  fold_ids = clust,
+  k_folds = length(unique(clust))
+)
+
+# Spatial random field
+her_space_2_cv <- sdmTMB_cv(
+  FR_her ~ 0 + year_f + depth_sc + s(pred_length_sc, k=3) + (1|month_f),
+  data = df,
+  mesh = mesh,
+  spatial = "on",
+  family = tweedie(link = "log"),
+  fold_ids = clust,
+  k_folds = length(unique(clust))
+)
+
+
+# Saduria
+# ICES as a random effects
+sad_space_1_cv <- sdmTMB_cv(
+  FR_sad ~ 0 + year_f + depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect),
+  data = df,
+  mesh = mesh,
+  spatial = "off",
+  family = tweedie(link = "log"),
+  fold_ids = clust,
+  k_folds = length(unique(clust))
+)
+
+# Spatial random field
+sad_space_2_cv <- sdmTMB_cv(
+  FR_sad ~ 0 + year_f + depth_sc + s(pred_length_sc, k=3) + (1|month_f),
+  data = df,
+  mesh = mesh,
+  spatial = "on",
+  family = tweedie(link = "log"),
+  fold_ids = clust,
+  k_folds = length(unique(clust))
+)
+```
+
+## 10-fold temporal cross validation & AIC to compare two models: spatial fields or ices rectangle as random effects
+
+```{r temporal cross val}
+# Set up temporal clusters
+
+# This is not very straightforward! Since with temporal clusters I don't have much spatial overlap
+
+# Note we remove year from the model because it can't be estimated for single years
+# clust <- as.numeric(as.factor(df$year))
+# 
+# # Plot
+# df$clust_id <- clust
+# 
+# df <- df |> mutate(clust_id = round(clust_id/2))
+# 
+# sort(unique(df$clust_id))
+# 
+# df <- df |> mutate(clust_id = ifelse(!year == 2021, 1, 2))
+# 
+# plot_map_fc +
+#   geom_point(data = df, aes(X*1000, Y*1000, color = year)) +
+#   scale_color_viridis() + 
+#   facet_wrap(~clust_id) +
+#   geom_sf(size = 0.1)
+# 
+# # Sprat
+# # ICES as a random effects
+# spr_temp_1_cv <- sdmTMB_cv(
+#   FR_spr ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect),
+#   data = df,
+#   mesh = mesh,
+#   spatial = "off",
+#   family = tweedie(link = "log"),
+#   fold_ids = clust,
+#   k_folds = length(unique(clust))
+# )
+# 
+# # Spatial random field
+# spr_temp_2_cv <- sdmTMB_cv(
+#   FR_spr ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f),
+#   data = df,
+#   mesh = mesh,
+#   spatial = "on",
+#   family = tweedie(link = "log"),
+#   fold_ids = clust,
+#   k_folds = length(unique(clust))
+# )
+# 
+# 
+# # Herring
+# # ICES as a random effects
+# her_temp_1_cv <- sdmTMB_cv(
+#   FR_her ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect),
+#   data = df,
+#   mesh = mesh,
+#   spatial = "off",
+#   family = tweedie(link = "log"),
+#   fold_ids = clust,
+#   k_folds = length(unique(clust))
+# )
+# 
+# # Spatial random field
+# her_temp_2_cv <- sdmTMB_cv(
+#   FR_her ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f),
+#   data = df,
+#   mesh = mesh,
+#   spatial = "on",
+#   family = tweedie(link = "log"),
+#   fold_ids = clust,
+#   k_folds = length(unique(clust))
+# )
+# 
+# 
+# # Saduria
+# # ICES as a random effects
+# sad_temp_1_cv <- sdmTMB_cv(
+#   FR_sad ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect),
+#   data = df,
+#   mesh = mesh,
+#   spatial = "off",
+#   family = tweedie(link = "log"),
+#   fold_ids = clust,
+#   k_folds = length(unique(clust))
+# )
+# 
+# # Spatial random field
+# sad_temp_2_cv <- sdmTMB_cv(
+#   FR_sad ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f),
+#   data = df,
+#   mesh = mesh,
+#   spatial = "on",
+#   family = tweedie(link = "log"),
+#   fold_ids = clust,
+#   k_folds = length(unique(clust))
+# )
+```
+
+## AIC 
+
+```{r}
+# ICES as a random effects
+fit_spr_m1 <- sdmTMB(
+  FR_spr ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect), 
+  data = df,
+  mesh = mesh,
+  time = "year",
+  time_varying = ~1,
+  spatial = "off",
+  spatiotemporal = "off",
+  family = tweedie(link = "log"))
+
+sanity(fit_spr_m1)
+
+fit_her_m1 <- sdmTMB(
+  FR_her ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect), 
+  data = df,
+  mesh = mesh,
+  time = "year",
+  time_varying = ~1,
+  spatial = "off",
+  spatiotemporal = "off",
+  family = tweedie(link = "log"))
+
+sanity(fit_her_m1)
+
+fit_sad_m1 <- sdmTMB(
+  FR_sad ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect), 
+  data = df,
+  mesh = mesh,
+  time = "year",
+  time_varying = ~1,
+  spatial = "off",
+  spatiotemporal = "off",
+  family = tweedie(link = "log"))
+
+sanity(fit_sad_m1)
+
+# Spatial random field
+fit_spr_m2 <- sdmTMB(
+  FR_spr ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f), 
+  data = df,
+  mesh = mesh,
+  time = "year",
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "off",
+  family = tweedie(link = "log"))
+
+sanity(fit_spr_m2)
+
+fit_her_m2 <- sdmTMB(
+  FR_her ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f), 
+  data = df,
+  mesh = mesh,
+  time = "year",
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "off",
+  family = tweedie(link = "log"))
+
+sanity(fit_her_m2)
+
+fit_sad_m2 <- sdmTMB(
+  FR_sad ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f), 
+  data = df,
+  mesh = mesh,
+  time = "year",
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "off",
+  family = tweedie(link = "log"))
+```
+
+# Print AIC & cross validation table
+
+```{r spatial cross val table}
+#| message: false
+#| warning: false
+#| cache: false
+
+# Higher is better!
+# likelihood from spatial cv
+sum_loglik_space <- data.frame(Prey = c("Sprat", "Herring", "Saduria"),
+                               rec  =  c(spr_space_1_cv$sum_loglik / 10000000,
+                                         her_space_1_cv$sum_loglik / 10000000,
+                                         sad_space_1_cv$sum_loglik / 10000000),
+                               space = c(spr_space_2_cv$sum_loglik / 10000000,
+                                         her_space_2_cv$sum_loglik / 10000000,
+                                         sad_space_2_cv$sum_loglik / 10000000)) |> 
+  mutate(rec_temp = rec, space_temp = space,
+         rec = ifelse(rec_temp > space_temp, paste0("**", rec, "**"), rec),
+         space = ifelse(space_temp > rec_temp, paste0("**", space, "**"), space)) |> 
+  rename("sum loglik<sub>ICES rect</sub>" = rec,
+         "sum loglik<sub>spatial</sub>" = space) |> 
+  dplyr::select(-rec_temp, -space_temp)
+
+
+# Higher is better!
+# likelihood from temporal cv
+# sum_loglik_temp <- data.frame(Prey = c("Sprat", "Herring", "Saduria"),
+#                               rec  =  c(spr_temp_1_cv$sum_loglik / 10000,
+#                                         her_temp_1_cv$sum_loglik / 10000,
+#                                         sad_temp_1_cv$sum_loglik / 10000),
+#                               space = c(spr_temp_2_cv$sum_loglik / 10000,
+#                                         her_temp_2_cv$sum_loglik / 10000,
+#                                         sad_temp_2_cv$sum_loglik / 10000)) |> 
+#   mutate(rec_temp = rec, space_temp = space,
+#          rec = ifelse(rec_temp > space_temp, paste0("**", rec, "**"), rec),
+#          space = ifelse(space_temp > rec_temp, paste0("**", space, "**"), space)) |> 
+#   rename("sum loglik<sub>ICES rect</sub>" = rec,
+#          "sum loglik<sub>spatial</sub>" = space) |> 
+#   dplyr::select(-rec_temp, -space_temp)
+
+
+# AIC ices models
+aic_ices <- AIC(fit_spr_m1, fit_her_m1, fit_sad_m1) |>
+  rownames_to_column() |> 
+  mutate(Prey = "Sprat",
+         Prey = ifelse(rowname == "fit_her_m1", "Herring", Prey),
+         Prey = ifelse(rowname == "fit_sad_m1", "Saduria", Prey)) |> 
+  mutate(AIC_r = AIC, 
+         AIC_r2 = AIC) |> 
+  dplyr::select(-rowname, -AIC, -df)
+
+aic_space <- AIC(fit_spr_m2, fit_her_m2, fit_sad_m2) |>
+  rownames_to_column() |> 
+  mutate(Prey = "Sprat",
+         Prey = ifelse(rowname == "fit_her_m2", "Herring", Prey),
+         Prey = ifelse(rowname == "fit_sad_m2", "Saduria", Prey)) |> 
+  
+  mutate(AIC_s = AIC,
+         AIC_s2 = AIC) |> 
+  dplyr::select(-rowname, -AIC, -df)
+
+aic <- aic_ices |> 
+  left_join(aic_space, by = "Prey") |> 
+  mutate(AIC_r = ifelse(AIC_r2 < AIC_s2, paste0("**", AIC_r, "**"), AIC_r),
+         AIC_s = ifelse(AIC_s2 < AIC_r2, paste0("**", AIC_s, "**"), AIC_s)) |> 
+  rename("AIC<sub>spatial</sub>" = AIC_s,
+         "AIC<sub>ICES rect</sub>" = AIC_r) |> 
+  dplyr::select(-AIC_s2, -AIC_r2)
+```
+
+```{r tables}
+#| message: false
+#| warning: false
+
+kableExtra::kbl(sum_loglik_space, format = "markdown", caption = "5-fold Spatial cross validation") |>
+  kable_styling(font_size = 20)
+
+# kableExtra::kbl(sum_loglik_temp, format = "markdown", caption = "2-fold Temporal cross validation") |>
+#   kable_styling(font_size = 20)
+
+kableExtra::kbl(aic, format = "markdown", caption = "AIC") |>
+  kable_styling(font_size = 20)
+```
+
+# Check residuals and from selected models
+
+```{r}
+# Summary
+summary(fit_spr_m2)
+summary(fit_her_m2)
+summary(fit_sad_m2)
+
+df |> filter(year == 2018) |> distinct(FR_sad)
+
+# Residuals
+spr_res <- mcmc_res <- residuals(fit_spr_m2, type = "mle-mcmc",
+                                 mcmc_samples = sdmTMBextra::predict_mle_mcmc(fit_spr_m2,
+                                                                              mcmc_iter = 201,
+                                                                              mcmc_warmup = 200))
+df$spr_res <- as.vector(spr_res)
+
+her_res <- mcmc_res <- residuals(fit_her_m2, type = "mle-mcmc",
+                                 mcmc_samples = sdmTMBextra::predict_mle_mcmc(fit_her_m2,
+                                                                              mcmc_iter = 201,
+                                                                              mcmc_warmup = 200))
+df$her_res <- as.vector(her_res)
+
+sad_res <- mcmc_res <- residuals(fit_sad_m2, type = "mle-mcmc",
+                                 mcmc_samples = sdmTMBextra::predict_mle_mcmc(fit_sad_m2,
+                                                                              mcmc_iter = 201,
+                                                                              mcmc_warmup = 200))
+df$sad_res <- as.vector(sad_res)
+
+# Plot all together
+df |> 
+  rename(Sprat = spr_res,
+         Herring = her_res,
+         Saduria = sad_res) |> 
+  pivot_longer(c(Sprat, Herring, Saduria)) |> 
+  ggplot(aes(sample = value)) +
+  facet_wrap(~name) +
+  stat_qq(size = 0.75, shape = 21, fill = NA) +
+  stat_qq_line() +
+  labs(y = "Sample Quantiles", x = "Theoretical Quantiles") +
+  theme(aspect.ratio = 1)
+```
+
+# Plot conditional effects, random effects and spatial predictions
+
+```{r}
+#| message: false
+
+# Depth
+vis_spr_dep <- visreg(fit_spr_m2, xvar = "depth_sc", plot = FALSE)
+vis_her_dep <- visreg(fit_her_m2, xvar = "depth_sc", plot = FALSE)
+vis_sad_dep <- visreg(fit_sad_m2, xvar = "depth_sc", plot = FALSE)
+
+vis_dep <- bind_rows(vis_spr_dep$fit |> mutate(species = "Sprat"),
+                     vis_her_dep$fit |> mutate(species = "Herring"), 
+                     vis_sad_dep$fit |> mutate(species = "Saduria")) |> 
+  mutate(var = "Depth (scaled)") |> 
+  rename(x = depth_sc)
+
+d_dep <- bind_rows(vis_spr_dep$res |> mutate(species = "Sprat"),
+                   vis_her_dep$res |> mutate(species = "Herring"),
+                   vis_sad_dep$res |> mutate(species = "Saduria")) |> 
+  mutate(var = "Depth (scaled)") |> 
+  rename(x = depth_sc)
+
+# Month
+vis_spr_mon <- visreg(fit_spr_m2, xvar = "month_f", plot = FALSE)
+vis_her_mon <- visreg(fit_her_m2, xvar = "month_f", plot = FALSE)
+vis_sad_mon <- visreg(fit_sad_m2, xvar = "month_f", plot = FALSE)
+
+vis_mon <- bind_rows(vis_spr_mon$fit |> mutate(species = "Sprat"),
+                     vis_her_mon$fit |> mutate(species = "Herring"), 
+                     vis_sad_mon$fit |> mutate(species = "Saduria")) |> 
+  mutate(var = "Month") |> 
+  rename(x = month_f) |> 
+  mutate(x = as.numeric(as.character(x)))
+
+d_mon <- bind_rows(vis_spr_mon$res |> mutate(species = "Sprat"),
+                   vis_her_mon$res |> mutate(species = "Herring"),
+                   vis_sad_mon$res |> mutate(species = "Saduria")) |> 
+  mutate(var = "Month") |> 
+  rename(x = month_f) |> 
+  mutate(x = as.numeric(as.character(x)))
+
+# Predator length
+vis_spr_len <- visreg(fit_spr_m2, xvar = "pred_length_sc", plot = FALSE)
+vis_her_len <- visreg(fit_her_m2, xvar = "pred_length_sc", plot = FALSE)
+vis_sad_len <- visreg(fit_sad_m2, xvar = "pred_length_sc", plot = FALSE)
+
+vis_len <- bind_rows(vis_spr_len$fit |> mutate(species = "Sprat"),
+                     vis_her_len$fit |> mutate(species = "Herring"),
+                     vis_sad_len$fit |> mutate(species = "Saduria")) |> 
+  mutate(var = "Predator length") |> 
+  rename(x = pred_length_sc)
+
+d_len <- bind_rows(vis_spr_len$res |> mutate(species = "Sprat"),
+                   vis_her_len$res |> mutate(species = "Herring"),
+                   vis_sad_len$res |> mutate(species = "Saduria")) |> 
+  mutate(var = "Predator length") |> 
+  rename(x = pred_length_sc)
+
+vis <- bind_rows(vis_dep, vis_mon, vis_len)
+vis_dat <- bind_rows(d_dep, d_mon, d_len)
+
+# Plot!
+ggplot(vis |> filter(!var == "Month"), aes(x = x, y = visregFit)) + 
+  facet_grid(var ~ species) + 
+  geom_point(data = vis_dat |> filter(!var == "Month"), aes(x = x, y = visregRes),
+             alpha = 0.3, color = "gray50") +
+  geom_ribbon(aes(ymin = visregLwr, ymax = visregUpr), alpha = 0.3, color = NA) +
+  geom_line(color = "steelblue", linewidth = 1) + 
+  labs(x = "Scaled variable", y = "Prediction") +
+  NULL
+
+ggsave(paste0(home, "/figures/conditional.pdf"), width = 17, height = 11, units = "cm")
+
+# Now do month (categorial)
+ggplot(vis |> filter(var == "Month"), aes(x = as.factor(x), y = visregFit)) + 
+  facet_wrap(~ species) + # free grid?
+  geom_jitter(data = vis_dat |> filter(var == "Month"), aes(x = as.factor(x), y = visregRes),
+             alpha = 0.1, color = "gray70") +
+  geom_errorbar(aes(ymin = visregLwr, ymax = visregUpr), alpha = 0.6, color = "steelblue",
+                width = 0, linewidth = 1) +
+  geom_point(color = "steelblue", size = 2) + 
+  labs(x = "Month", y = "Prediction") +
+  theme(aspect.ratio = 5/6) +
+  NULL
+
+ggsave(paste0(home, "/figures/conditional_month.pdf"), width = 17, height = 6, units = "cm")
+```
+
+# Calculate indices
+
+```{r}
+# Need to refit the models with the extra time argument. The reason we don't do that before is because it creates a mismatch in residual dimensions and data
+# This is for interpolating between year using the random walk
+extra_time <- pred_grid |> filter(!year %in% df$year) |> distinct(year) |> pull(year)
+
+# Spatial random field
+fit_spr_m2_extra <- sdmTMB(
+  FR_spr ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f), 
+  data = df,
+  mesh = mesh,
+  time = "year",
+  time_varying = ~1,
+  extra_time = extra_time,
+  spatial = "on",
+  spatiotemporal = "off",
+  family = tweedie(link = "log"))
+
+fit_her_m2_extra <- sdmTMB(
+  FR_her ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f), 
+  data = df,
+  mesh = mesh,
+  time = "year",
+  time_varying = ~1,
+  extra_time = extra_time,
+  spatial = "on",
+  spatiotemporal = "off",
+  family = tweedie(link = "log"))
+
+fit_sad_m2_extra <- sdmTMB(
+  FR_sad ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f), 
+  data = df,
+  mesh = mesh,
+  time = "year",
+  time_varying = ~1,
+  extra_time = extra_time,
+  spatial = "on",
+  spatiotemporal = "off",
+  family = tweedie(link = "log"))
+
+# Predict on grid, for indices and maps
+pred_spr <- predict(fit_spr_m2_extra, newdata = pred_grid, return_tmb_object = TRUE)
+pred_her <- predict(fit_her_m2_extra, newdata = pred_grid, return_tmb_object = TRUE)
+pred_sad <- predict(fit_sad_m2_extra, newdata = pred_grid, return_tmb_object = TRUE)
+
+# Make temporal index!
+ncells <- filter(pred_grid, year == max(pred_grid$year)) |> nrow()
+
+index_spr <- get_index(pred_spr, area = rep(1/ncells, nrow(pred_spr$data)))
+index_her <- get_index(pred_her, area = rep(1/ncells, nrow(pred_her$data)))
+index_sad <- get_index(pred_sad, area = rep(1/ncells, nrow(pred_sad$data)))
+
+# Make long
+index <- bind_rows(index_spr |> mutate(prey = "Sprat"),
+                   index_her |> mutate(prey = "Herring"),
+                   index_sad |> mutate(prey = "Saduria")) |> 
+  mutate(Observed = ifelse(year %in% extra_time, "No", "Yes"))
+
+# For comparison with data
+df_sum <- df |>
+  group_by(year) |>
+  summarise(Sprat = mean(FR_spr),
+            Herring = mean(FR_her),
+            Saduria = mean(FR_sad)) |> 
+  pivot_longer(c("Sprat", "Herring", "Saduria"), names_to = "prey", values_to = "mean_fr")
+
+
+sort(unique(index$year))
+sort(unique(pred_grid$year))
+
+
+index |> 
+  ggplot(aes(year, est, fill = Observed)) +
+  geom_point(shape = 21, alpha = 0.7) +
+  scale_fill_manual(values = c("white", "grey10")) +
+  facet_wrap(~prey, ncol = 1, scales = "free") + 
+  geom_errorbar(aes(ymin = lwr, ymax = upr), alpha = 0.4, width = 0) +
+  geom_point(data = df_sum, aes(year, mean_fr, color = "Data"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  labs(x = "Year", y = "Feeding ratio", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 3)) +
+  theme(legend.position = "bottom")
+
+ggsave(paste0(home, "/figures/supp/index_ci.pdf"), width = 11, height = 20, units = "cm")
+
+index |> 
+  mutate(upr = ifelse(prey == "Sprat" & upr > 0.015, 0.015, upr)) |> 
+  ggplot(aes(year, est)) +
+  geom_point(alpha = 0.7) + 
+  stat_smooth(method = "gam", formula = y~s(x, k=4), color = "steelblue") +
+  facet_wrap(~prey, ncol = 3, scales = "free") + 
+  labs(x = "Year", y = "Feeding ratio", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  theme_sleek(base_size = 9) +
+  theme(legend.position = c(0.9, 0.9))
+
+ggsave(paste0(home, "/figures/index.pdf"), width = 17, height = 6, units = "cm")
+```
+
+# Plot spatial predictions
+
+```{r}
+spatial_preds <- bind_rows(pred_spr$data |> mutate(prey = "Sprat"),
+                           pred_her$data |> mutate(prey = "Herring"),
+                           pred_sad$data |> mutate(prey = "Saduria"))
+
+# Plot spatial random effect
+plot_map +
+  geom_raster(data = spatial_preds |> filter(year == 2000),
+              aes(X*1000, Y*1000, fill = omega_s)) +
+  scale_fill_gradient2(name = "Spatial random field") +
+  facet_wrap(~prey) +
+  geom_sf(size = 0.1) + 
+  theme_sleek(base_size = 9) + 
+  theme(legend.position = c(0.05, 0.65)) +
+  theme(legend.position = c(0.05, 0.7),
+        legend.key.height = unit(0.6, "line"),
+        legend.key.width = unit(0.2, "line"))
+
+ggsave(paste0(home, "/figures/supp/diet_omega_s.pdf"), width = 17, height = 6, units = "cm")
+
+
+# Plot spatiotemporal predictions
+plot_map_fc +
+  geom_raster(data = spatial_preds |> filter(prey == "Sprat"), aes(X*1000, Y*1000, fill = exp(est))) +
+  scale_fill_viridis(trans = "sqrt", name = "FR") +
+  facet_wrap(~year) +
+  geom_sf(size = 0.1)
+
+ggsave(paste0(home, "/figures/supp/sprat_spatiotemporal_diet.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map_fc +
+  geom_raster(data = spatial_preds |> filter(prey == "Herring"), aes(X*1000, Y*1000, fill = exp(est))) +
+  scale_fill_viridis(trans = "sqrt", name = "FR") +
+  facet_wrap(~year) +
+  geom_sf(size = 0.1)
+
+ggsave(paste0(home, "/figures/supp/herring_spatiotemporal_diet.pdf"), width = 17, height = 17, units = "cm")
+
+plot_map_fc +
+  geom_raster(data = spatial_preds |> filter(prey == "Saduria"), aes(X*1000, Y*1000, fill = exp(est))) +
+  scale_fill_viridis(trans = "sqrt", name = "FR") +
+  facet_wrap(~year) +
+  geom_sf(size = 0.1)
+
+ggsave(paste0(home, "/figures/supp/saduria_spatiotemporal_diet.pdf"), width = 17, height = 17, units = "cm")
+
+
+# Plot spatiotemporal predictions for a year and all species
+plot_map +
+  geom_raster(data = spatial_preds|> filter(year == "2000"), aes(X*1000, Y*1000, fill = exp(est))) +
+  scale_fill_viridis(trans = "sqrt", name = "FR") +
+  facet_wrap(~prey) +
+  geom_sf(size = 0.1) + 
+  theme_sleek(base_size = 9) + 
+  theme(legend.position = c(0.05, 0.7),
+        legend.key.height = unit(0.6, "line"),
+        legend.key.width = unit(0.2, "line"))
+
+ggsave(paste0(home, "/figures/supp/spatial_prey_prediction_2000.pdf"), width = 17, height = 6, units = "cm")
+```
+
+# Plot correlations between spatial overlap and population-level FR
+
+```{r}
+# Join feeding ratio indicies (per capita) and overlap
+cod_spr <- read_csv(paste0(home, "/output/cod_pel_sum_ovrlap.csv")) |>
+  dplyr::select(year, cod_spr_ovr_tot) |> 
+  rename(overlap = cod_spr_ovr_tot) |> 
+  mutate(prey = "Sprat")
+
+cod_her <- read_csv(paste0(home, "/output/cod_pel_sum_ovrlap.csv")) |>
+  dplyr::select(year, cod_her_ovr_tot) |> 
+  rename(overlap = cod_her_ovr_tot) |> 
+  mutate(prey = "Herring")
+
+cod_ben <- read_csv(paste0(home, "/output/cod_ben_sum_ovrlap.csv")) |>
+  dplyr::select(year, cod_sad_ovr_tot) |> 
+  rename(overlap = cod_sad_ovr_tot) |> 
+  mutate(prey = "Saduria")
+
+overlap <- bind_rows(cod_spr, cod_her, cod_ben)
+
+index_ovr <- index |>
+  left_join(overlap, by = c("year", "prey")) |> 
+  drop_na()
+
+# Join in cod biomass data to calculate snapshot predation
+cod_pred <- read_csv(paste0(home, "/output/pred_cod.csv")) |> 
+  filter(quarter == 4)
+
+# Left join cod biomass density onto the grid of diet predictions
+spatial_preds_dens <- left_join(spatial_preds, cod_pred |>
+                                  dplyr::select(est, X, Y, year) |> 
+                                  rename(est_codbiom = est))
+
+# Multiply local feeding ration with biomass density of cod
+spatial_preds_dens <- spatial_preds_dens |> 
+  mutate(pred = exp(est) * est_codbiom)
+
+# Summarise across years
+spatial_preds_dens_sum <- spatial_preds_dens |> 
+  group_by(prey, year) |> 
+  summarise(tot_pred = sum(pred))
+
+# Left_join with index data
+index_ovr <- index_ovr |>
+  left_join(spatial_preds_dens_sum, by = c("year", "prey")) |> 
+  drop_na()
+
+# Check some regressions...
+summary(lm(tot_pred ~ overlap, data = index_ovr |> filter(prey == "Sprat")))
+summary(lm(tot_pred ~ overlap, data = index_ovr |> filter(prey == "Herring")))
+summary(lm(tot_pred ~ overlap, data = index_ovr |> filter(prey == "Saduria")))
+
+summary(lm(est ~ overlap, data = index_ovr |> filter(prey == "Sprat")))
+summary(lm(est ~ overlap, data = index_ovr |> filter(prey == "Herring")))
+summary(lm(est ~ overlap, data = index_ovr |> filter(prey == "Saduria")))
+
+# Calculate correlations between FR, predation and overlap
+cor <- plyr::ddply(index_ovr, c("prey"),
+                   summarise,
+                   cor_fr_ovr = round(cor(overlap, est), 2),
+                   cor_pred_ovr = round(cor(overlap, tot_pred), 2)) |> 
+  pivot_longer(c("cor_fr_ovr", "cor_pred_ovr")) |> 
+  mutate(name = ifelse(name == "cor_fr_ovr", "Feeding ratio", "Total predation"))
+
+# Plot!
+library(ggh4x)<
+
+index_ovr |> 
+  rename('Feeding ratio' = est, 
+         'Total predation' = tot_pred) |> 
+  pivot_longer(c('Feeding ratio', 'Total predation')) |> 
+  ggplot(aes(overlap, value)) +
+  geom_point() +
+  #facet_wrap(name ~ prey, scales = "free") +
+  ggh4x::facet_grid2(name ~ prey, scales = "free", independent = "y") +
+  geom_smooth(aes(overlap, value), inherit.aes = FALSE, color = "steelblue",
+              formula = y~s(x, k=10), method = "gam") +
+  geom_text(data = cor,
+            aes(label = paste("r=", value, sep = "")), x = -Inf, y = Inf, hjust = -.1, vjust = 2.5,
+            inherit.aes = FALSE, fontface = "italic", size = 2.5, color = "tomato3") +
+  labs(y = "Population-level feeding ratio", x = "Spatial overlap", color = "Year") +
+  theme_sleek(base_size = 9) +
+  theme(legend.position = "bottom", aspect.ratio = 1) +
+  NULL
+
+# Summarise the differences here, make fake facet grid free axis
+
+ggsave(paste0(home, "/figures/fr_overlap_cor.pdf"), width = 17, height = 11, units = "cm")
+```
+
+TODO:
+
+- there are new data in the db that are not in stefans data also for the older period. find a way to not get duplicates.
+- update as I get more data
+- explore the spatial effects more
+- make a clean, straight script for all species that produces the plots for the report
+

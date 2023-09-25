@@ -268,7 +268,7 @@ r2.sdmTMB <- function(x, which_fixef = NULL, method = NULL) {
   as.data.frame(out) |> pivot_longer(everything(), names_to = "component", values_to = "R2")
   
 }
-# 
+ 
 # r2.sdmTMB(fit)
 # r2.sdmTMB(fit_re)
 # 
@@ -289,9 +289,9 @@ r2.sdmTMB <- function(x, which_fixef = NULL, method = NULL) {
 #   temp <- r2.sdmTMB(x, which_fixef = i) |>
 #     filter(component == "marginal") |>
 #     mutate(variable = tidy(x)$term[i])
-#     
+# 
 #     dl[[i]] <- temp
-#     
+# 
 #     }
 #   
 # partial_R2 <- bind_rows(dl)

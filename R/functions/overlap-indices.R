@@ -24,13 +24,13 @@ loc_collocspfn_tot <- function(prey, pred) {
 asymmalpha_overlapspfn <-function(prey, pred){
   p_prey <- prey/sum(prey, na.rm = T)
   p_pred <- pred/sum(pred, na.rm = T)
-  (p_pred*p_prey)/sum(p_prey^2, na.rm = T)
+  (p_pred*p_prey)/sqrt(sum(p_prey^2, na.rm = T))
 }
 
 asymmalpha_overlapspfn_tot <-function(prey, pred){
   p_prey <- prey/sum(prey, na.rm = T)
   p_pred <- pred/sum(pred, na.rm = T)
-  sum((p_pred*p_prey)/sum(p_prey^2, na.rm = T))
+  sum((p_pred*p_prey)/sqrt(sum(p_prey^2, na.rm = T)))
 }
 
 # Biomass weighted overlap (scaled)
@@ -38,3 +38,10 @@ thorson_overlapspfn <- function(prey, pred) {
   (prey/max(prey, na.rm = T)) * (pred/max(pred, na.rm = T))/sum(prey/max(prey, na.rm = T), na.rm = T)
 }
 
+## Hurlbert's overlap
+hurlbert_overlapspfn <- function(prey, pred, area) {
+  total_area <- sum(area, na.rm = T)
+  p_prey <- prey/sum(prey, na.rm = T)
+  p_pred <- pred/sum(pred, na.rm = T)
+  (p_pred*p_prey)/(area/total_area)
+}

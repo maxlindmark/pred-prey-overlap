@@ -1,15 +1,15 @@
 ---
-title: "Fit density models to cod of different sizes and calculate spatial overlap with prey"
+title: "Calculate spatial overlap with prey"
 author: "Max Lindmark"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 format: 
   html:
+    page-layout: full
     embed-resources: true
-    fig-width: 8
-    fig-asp: 0.618
 knitr: 
   opts_chunk:
     fig.align: center
+    out.width: "100%"
 editor: source
 execute: 
   echo: true
@@ -25,13 +25,7 @@ execute:
 #| warning: false
 #| code-fold: true
 
-# Using dev branch of sdmTMB
-# remotes::install_github("pbs-assess/sdmTMB", dependencies = TRUE)
-
-# with_libpaths(new = "/Users/maxlindmark/Dropbox/Max work/R/sdmTMB-zeta-intercept/",
-#               install_github("pbs-assess/sdmTMB", ref = "zeta-intercept"))
-
-library(sdmTMB, lib.loc = "/Users/maxlindmark/Dropbox/Max work/R/sdmTMB-zeta-intercept")
+library(sdmTMB)
 
 pkgs <- c("tidyverse", "RCurl", "viridis", "devtools", "terra", "readxl", "mapplots", "tidylog") 
 
@@ -50,12 +44,9 @@ library(sdmTMB)
 
 # devtools::install_github("seananderson/ggsidekick") # not on CRAN 
 library(ggsidekick)
-theme_set(theme_sleek(base_size = 20))
+theme_set(theme_sleek())
 
 # Source code for map plots
-# You need: # devtools::install_github("seananderson/ggsidekick") # not on CRAN; library(ggsidekick)
-# Source code for map plots
-# You need: # devtools::install_github("seananderson/ggsidekick") # not on CRAN; library(ggsidekick)
 devtools::source_url("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/R/functions/map-plot.R")
 
 options(ggplot2.continuous.colour = "viridis")
@@ -356,59 +347,45 @@ Remember, pelagic data is from Q4 while saduria data is not resolved on a finer 
 # Pelagics
 # Calculate overlap indices in space
 cod_pel <- cod_pred |> 
+  mutate(area = 2) |> 
   filter(quarter == 4) |> 
-  group_by(year, quarter) |> 
+  group_by(year) |> 
   mutate(# sprat
-         cod_spr_ovr = asymmalpha_overlapspfn(pred = est, prey = biomass_spr),
-         cod_spr_ovr_sd = asymmalpha_overlapspfn(pred = est, prey = biomass_spr_sd),
+         cod_spr_ovr = loc_collocspfn(pred = est, prey = biomass_spr),
+         cod_spr_ovr_sd = loc_collocspfn(pred = est, prey = biomass_spr_sd),
          
          # herring
-         cod_her_ovr = asymmalpha_overlapspfn(pred = est, prey = biomass_her),
-         cod_her_ovr_sd = asymmalpha_overlapspfn(pred = est, prey = biomass_her_sd)) |> 
+         cod_her_ovr = loc_collocspfn(pred = est, prey = biomass_her),
+         cod_her_ovr_sd = loc_collocspfn(pred = est, prey = biomass_her_sd)) |> 
   ungroup()
   
-# Calculate summarised overlaps
+# Save total overlap
 cod_pel_sum <- cod_pel |> 
   group_by(year) |> 
-  summarise(cod_spr_ovr_tot = asymmalpha_overlapspfn_tot(pred = est, prey = biomass_spr),
-            cod_spr_ovr_sd_tot = asymmalpha_overlapspfn_tot(pred = est, prey = biomass_spr_sd),
-            
-            cod_her_ovr_tot = asymmalpha_overlapspfn_tot(pred = est, prey = biomass_her),
-            cod_her_ovr_sd_tot = asymmalpha_overlapspfn_tot(pred = est, prey = biomass_her_sd),
-            
-            # centre of gravity)
-            cod_spr_cog_Y = weighted.mean(Y, cod_spr_ovr),
-            cod_spr_cog_X = weighted.mean(X, cod_spr_ovr),
-            cod_spr_cog_sd_Y = weighted.mean(Y, cod_spr_ovr_sd),
-            cod_spr_cog_sd_X = weighted.mean(X, cod_spr_ovr_sd),
-            
-            cod_her_cog_Y = weighted.mean(Y, cod_her_ovr),
-            cod_her_cog_X = weighted.mean(X, cod_her_ovr),
-            cod_her_cog_sd_Y = weighted.mean(Y, cod_her_ovr_sd),
-            cod_her_cog_sd_X = weighted.mean(X, cod_her_ovr_sd)) |> 
-  ungroup()
+  summarise(cod_spr_ovr_tot = sum(cod_spr_ovr),
+            cod_spr_ovr_sd_tot = sum(cod_spr_ovr_sd),
+            cod_her_ovr_tot = sum(cod_her_ovr),
+            cod_her_ovr_sd_tot = sum(cod_her_ovr_sd))
+
+write_csv(cod_pel_sum, paste0(home, "/output/cod_pel_sum_ovrlap.csv"))
 
 # Saduria
 # Calculate overlap indices in space
 cod_ben <- cod_pred |> 
   drop_na(density_saduria) |> 
   group_by(year, quarter) |> 
-  mutate(cod_sad_ovr = asymmalpha_overlapspfn(pred = est, prey = density_saduria)) |> 
+  mutate(cod_sad_ovr = loc_collocspfn(pred = est, prey = density_saduria)) |> 
   ungroup()
 
-# Calculate summarised overlaps
+# Save total overlap
 cod_ben_sum <- cod_ben |> 
-  drop_na(density_saduria) |> 
   group_by(year, quarter) |> 
-  # centre of gravity
-  summarise(cod_sad_ovr_tot = asymmalpha_overlapspfn_tot(pred = est, prey = density_saduria),
-            
-            cod_sad_cog_Y = weighted.mean(Y, cod_sad_ovr),
-            cod_sad_cog_X = weighted.mean(X, cod_sad_ovr)) |> 
-  ungroup()
+  summarise(cod_sad_ovr_tot = sum(cod_sad_ovr))
+  
+write_csv(cod_ben_sum, paste0(home, "/output/cod_ben_sum_ovrlap.csv"))
 ```
 
-Plot overlap
+Plot overlap in space
 
 ```{r plot overlap in space}
 # Plot overlap in space
@@ -434,18 +411,6 @@ plot_map_fc +
 
 ggsave(paste0(home, "/figures/supp/spr_overlap_space_sd.pdf"), width = 17, height = 17, units = "cm")
 
-plot_map + 
-  geom_point(data = cod_pel_sum |> filter(year < 2020),
-             aes(cod_spr_cog_X*1000, cod_spr_cog_Y*1000, color = year))
-
-ggsave(paste0(home, "/figures/supp/spr_overlap_cog.pdf"), width = 17, height = 17, units = "cm")
-
-plot_map + 
-  geom_point(data = cod_pel_sum |> filter(year < 2020),
-             aes(cod_spr_cog_sd_X*1000, cod_spr_cog_sd_Y*1000, color = year))
-
-ggsave(paste0(home, "/figures/supp/spr_overlap_cog_sd.pdf"), width = 17, height = 17, units = "cm")
-
 # Herring
 plot_map_fc + 
   geom_raster(data = cod_pel |> filter(year < 2020),
@@ -470,17 +435,6 @@ plot_map_fc +
 
 ggsave(paste0(home, "/figures/supp/her_overlap_space_sd.pdf"), width = 17, height = 17, units = "cm")
 
-plot_map + 
-  geom_point(data = cod_pel_sum |> filter(year < 2020),
-             aes(cod_her_cog_X*1000, cod_her_cog_Y*1000, color = year))
-
-ggsave(paste0(home, "/figures/supp/her_overlap_cog.pdf"), width = 17, height = 17, units = "cm")
-
-plot_map + 
-  geom_point(data = cod_pel_sum |> filter(year < 2020),
-             aes(cod_her_cog_sd_X*1000, cod_her_cog_sd_Y*1000, color = year))
-
-ggsave(paste0(home, "/figures/supp/her_overlap_cog_sd.pdf"), width = 17, height = 17, units = "cm")
 
 # Saduria
 plot_map_fc + 
@@ -498,48 +452,44 @@ plot_map_fc +
   scale_fill_viridis(name = "Cod-Saduria overlap", trans = "sqrt", option = "mako")
 
 ggsave(paste0(home, "/figures/supp/sad_overlap_space_q1.pdf"), width = 17, height = 17, units = "cm")
-
-plot_map + 
-  geom_point(data = cod_ben_sum |> filter(year < 2020 & quarter == 4),
-             aes(cod_sad_cog_X*1000, cod_sad_cog_Y*1000, color = year))
-
-ggsave(paste0(home, "/figures/supp/sad_overlap_cog_q4.pdf"), width = 17, height = 17, units = "cm")
-
-plot_map + 
-  geom_point(data = cod_ben_sum |> filter(year < 2020 & quarter == 1),
-             aes(cod_sad_cog_X*1000, cod_sad_cog_Y*1000, color = year))
-
-ggsave(paste0(home, "/figures/supp/sad_overlap_cog_q1.pdf"), width = 17, height = 17, units = "cm")
 ```
 
 Plot overlap over time
 
 ```{r}
-cod_pel_sum_wide <- cod_pel_sum |> 
+pel_annual <- cod_pel |> 
+  group_by(year) |> 
+  summarise(cod_spr_ovr_tot = sum(cod_spr_ovr),
+            cod_spr_ovr_sd_tot = sum(cod_spr_ovr_sd),
+            cod_her_ovr_tot = sum(cod_her_ovr),
+            cod_her_ovr_sd_tot = sum(cod_her_ovr_sd)) |> 
   pivot_longer(c("cod_spr_ovr_tot", "cod_spr_ovr_sd_tot", "cod_her_ovr_tot", "cod_her_ovr_sd_tot")) |> 
   mutate(Species = ifelse(name %in% c("cod_spr_ovr_tot", "cod_spr_ovr_sd_tot"), "Sprat", "Herring")) |> 
   mutate(Scale = ifelse(name %in% c("cod_her_ovr_sd_tot", "cod_spr_ovr_sd_tot"), "Subdivision", "ICES Rect."))
 
-ggplot(data = cod_pel_sum_wide, aes(year, value)) +
-  geom_point(color = "grey20") +
-  geom_line() + 
-  labs(x = "Year", y = "Asymmetrical alpha overlap index") +
-  facet_grid(Scale ~ Species) +
-  geom_smooth(method = "gam", formula = y~s(x, k = 4), color = "tomato2") + 
-  theme(aspect.ratio = 1)
+ggplot(data = pel_annual, aes(year, value, color = Scale, fill = Scale)) +
+  geom_point(alpha = 0.5) +
+  geom_line(alpha = 0.5) + 
+  geom_smooth(method = "gam", formula = y~s(x, k = 4), alpha = 0.2) + 
+  scale_fill_brewer(palette = "Set1") +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = "Year", y = "Biomass-weighted overlap index") +
+  facet_wrap(~ Species) +
+  theme(legend.position = c(0.42, 0.12))
 
-ggsave(paste0(home, "/figures/pelagic_overlap.pdf"), width = 17, height = 17, units = "cm")
+ggsave(paste0(home, "/figures/pelagic_overlap.pdf"), width = 17, height = 9, units = "cm")
 
 # Saduria
 cod_ben_sum |> 
   mutate(quart_lab = ifelse(quarter == 1, "Quarter 1", "Quarter 4")) |> 
-  ggplot(aes(year, cod_sad_ovr_tot)) +
-  geom_point() +
-  geom_line() +
-  labs(x = "Year", y = "Asymmetrical alpha overlap index") +
-  geom_smooth(method = "gam", formula = y~s(x, k = 4), color = "tomato2") +
-  facet_wrap(~quart_lab) + 
-  theme(aspect.ratio = 1)
+  ggplot(aes(year, cod_sad_ovr_tot, color = quart_lab, fill = quart_lab)) +
+  geom_point(alpha = 0.5) +
+  geom_line(alpha = 0.5) + 
+  geom_smooth(method = "gam", formula = y~s(x, k = 4), alpha = 0.2) + 
+  labs(x = "Year", y = "Biomass-weighted overlap index", color = "", fill = "") +
+  scale_fill_brewer(palette = "Set1") +
+  scale_color_brewer(palette = "Set1")
 
-ggsave(paste0(home, "/figures/saduria_overlap.pdf"), width = 17, height = 11, units = "cm")
+ggsave(paste0(home, "/figures/saduria_overlap.pdf"), width = 11, height = 7, units = "cm")
 ```
+
