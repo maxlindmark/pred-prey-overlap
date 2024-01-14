@@ -26,7 +26,7 @@ execute:
 
 # Load libraries, install if needed
 pkgs <- c("tidyverse", "tidylog", "devtools", "sdmTMB", "sdmTMBextra", "terra", "mapplots",
-          "viridis", "visreg", "modelr", "future", "kableExtra") 
+          "viridis", "visreg", "modelr", "future", "kableExtra", "ggh4x", "patchwork") 
 
 if(length(setdiff(pkgs,rownames(installed.packages()))) > 0){
 
@@ -60,40 +60,53 @@ set.seed(99)
 # qwraps2::lazyload_cache_dir(path = paste0(home, "/R/main-analysis/03-fit-diet-models_cache/html"))
 ```
 
-Read old and new data, combine!
+Read cleaned data
 
 ```{r}
 #| message: false
 #| warning: false
 
-df <- read_csv(paste0(home, "/data/clean/stomachs.csv")) |> 
+df <- read_csv(paste0(home, "/data/clean/stomachs.csv")) |>
+  #filter(pred_length > 15 & pred_length < 50) |> 
   mutate(depth_sc = (depth - mean(depth))/sd(depth),
          year_f = as.factor(year),
          month_f = as.factor(month),
          ices_rect = as.factor(ices_rect),
-         pred_length_sc = (pred_length - mean(pred_length)) / sd(pred_length)) |> 
-  filter(pred_length > 10) |> 
-  filter(FR_spr < 0.4) |> # Check this by year... 
-  filter(FR_sad < 0.4) |> 
-  filter(FR_her < 0.4)
+         pred_length_sc = (pred_length - mean(pred_length)) / sd(pred_length)) # read_csv(paste0(home, "/data/clean/stomachs.csv")) |> summarise(mean = mean(pred_length))
 
 # Read the prediction grid...
 pred_grid <- bind_rows(read_csv(paste0(home, "/data/clean/pred_grid_(1_2).csv")),
                        read_csv(paste0(home, "/data/clean/pred_grid_(2_2).csv")))
 
+# Summarize samples size per location for plotting... 
+dd_plot <- df |>
+  group_by(year, X, Y) |> 
+  mutate(sample_size = n(),
+         pos_id = paste(year, X, Y)) |> 
+  ungroup() |> 
+  distinct(pos_id, .keep_all = TRUE)
+
 # Scale with respect to data!
 df |> group_by(month) |> summarise(n = n()) |> arrange(desc(n))
 
 pred_grid <- pred_grid |> 
-  drop_na(oxy, temp, sal, depth) |> 
+  drop_na(depth) |> 
+  filter(depth < quantile(df$depth, probs = 0.99)) |> 
   filter(quarter == 4) |> # Not needed in theory for saduria...
   mutate(depth_sc = (depth - mean(df$depth)) / sd(df$depth),
          year_f = as.factor(year),
-         month_f = as.factor(3),
+         month_f = as.factor(11),
          year = as.integer(year),
          pred_length_sc = 0,
          ices_rect = as.factor(ices_rect)) |> 
   droplevels()
+
+ggplot() + 
+  geom_histogram(data = pred_grid, aes(depth, fill = "pred_grid")) + 
+  geom_histogram(data = df, aes(depth, fill = "data"))
+
+ggplot(pred_grid |> filter(year == 1999), aes(X, Y, color = depth)) + 
+  geom_point()
 ```
 
 # Plot data!
@@ -109,6 +122,15 @@ df |>
   coord_cartesian(ylim = c(0, 0.1)) +
   facet_wrap(~name, ncol = 1) +
   geom_smooth()
+
+plot_map +
+  geom_point(data = df, aes(X*1000, Y*1000, color = year)) +
+  scale_color_viridis() + 
+  geom_sf(size = 0.1) +
+  theme(legend.position = c(0.2, 0.8)) + 
+  labs(color = "Year")
+
+ggsave(paste0(home, "/figures/supp/year_diet_map.pdf"), width = 11, height = 11, units = "cm")
 ```
 
 Set up a mesh
@@ -127,7 +149,7 @@ ggplot() +
   labs(x = "Easting (km)", y = "Northing (km)")
 ```
 
-# Spatial and temporal cross validation, and AIC, to compare spatial vs non spatial models
+# Spatial cross validation and AIC to compare spatial vs non spatial models
 
 ## 5-fold spatial cross validation & AIC to compare two models: spatial fields or ices rectangle as random effects
 
@@ -213,103 +235,6 @@ sad_space_2_cv <- sdmTMB_cv(
   fold_ids = clust,
   k_folds = length(unique(clust))
 )
-```
-
-## 10-fold temporal cross validation & AIC to compare two models: spatial fields or ices rectangle as random effects
-
-```{r temporal cross val}
-# Set up temporal clusters
-
-# This is not very straightforward! Since with temporal clusters I don't have much spatial overlap
-
-# Note we remove year from the model because it can't be estimated for single years
-# clust <- as.numeric(as.factor(df$year))
-# 
-# # Plot
-# df$clust_id <- clust
-# 
-# df <- df |> mutate(clust_id = round(clust_id/2))
-# 
-# sort(unique(df$clust_id))
-# 
-# df <- df |> mutate(clust_id = ifelse(!year == 2021, 1, 2))
-# 
-# plot_map_fc +
-#   geom_point(data = df, aes(X*1000, Y*1000, color = year)) +
-#   scale_color_viridis() + 
-#   facet_wrap(~clust_id) +
-#   geom_sf(size = 0.1)
-# 
-# # Sprat
-# # ICES as a random effects
-# spr_temp_1_cv <- sdmTMB_cv(
-#   FR_spr ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect),
-#   data = df,
-#   mesh = mesh,
-#   spatial = "off",
-#   family = tweedie(link = "log"),
-#   fold_ids = clust,
-#   k_folds = length(unique(clust))
-# )
-# 
-# # Spatial random field
-# spr_temp_2_cv <- sdmTMB_cv(
-#   FR_spr ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f),
-#   data = df,
-#   mesh = mesh,
-#   spatial = "on",
-#   family = tweedie(link = "log"),
-#   fold_ids = clust,
-#   k_folds = length(unique(clust))
-# )
-# 
-# 
-# # Herring
-# # ICES as a random effects
-# her_temp_1_cv <- sdmTMB_cv(
-#   FR_her ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect),
-#   data = df,
-#   mesh = mesh,
-#   spatial = "off",
-#   family = tweedie(link = "log"),
-#   fold_ids = clust,
-#   k_folds = length(unique(clust))
-# )
-# 
-# # Spatial random field
-# her_temp_2_cv <- sdmTMB_cv(
-#   FR_her ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f),
-#   data = df,
-#   mesh = mesh,
-#   spatial = "on",
-#   family = tweedie(link = "log"),
-#   fold_ids = clust,
-#   k_folds = length(unique(clust))
-# )
-# 
-# 
-# # Saduria
-# # ICES as a random effects
-# sad_temp_1_cv <- sdmTMB_cv(
-#   FR_sad ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f) + (1|ices_rect),
-#   data = df,
-#   mesh = mesh,
-#   spatial = "off",
-#   family = tweedie(link = "log"),
-#   fold_ids = clust,
-#   k_folds = length(unique(clust))
-# )
-# 
-# # Spatial random field
-# sad_temp_2_cv <- sdmTMB_cv(
-#   FR_sad ~ depth_sc + s(pred_length_sc, k=3) + (1|month_f),
-#   data = df,
-#   mesh = mesh,
-#   spatial = "on",
-#   family = tweedie(link = "log"),
-#   fold_ids = clust,
-#   k_folds = length(unique(clust))
-# )
 ```
 
 ## AIC 
@@ -411,23 +336,7 @@ sum_loglik_space <- data.frame(Prey = c("Sprat", "Herring", "Saduria"),
          "sum loglik<sub>spatial</sub>" = space) |> 
   dplyr::select(-rec_temp, -space_temp)
 
-
-# Higher is better!
-# likelihood from temporal cv
-# sum_loglik_temp <- data.frame(Prey = c("Sprat", "Herring", "Saduria"),
-#                               rec  =  c(spr_temp_1_cv$sum_loglik / 10000,
-#                                         her_temp_1_cv$sum_loglik / 10000,
-#                                         sad_temp_1_cv$sum_loglik / 10000),
-#                               space = c(spr_temp_2_cv$sum_loglik / 10000,
-#                                         her_temp_2_cv$sum_loglik / 10000,
-#                                         sad_temp_2_cv$sum_loglik / 10000)) |> 
-#   mutate(rec_temp = rec, space_temp = space,
-#          rec = ifelse(rec_temp > space_temp, paste0("**", rec, "**"), rec),
-#          space = ifelse(space_temp > rec_temp, paste0("**", space, "**"), space)) |> 
-#   rename("sum loglik<sub>ICES rect</sub>" = rec,
-#          "sum loglik<sub>spatial</sub>" = space) |> 
-#   dplyr::select(-rec_temp, -space_temp)
-
+sum_loglik_space
 
 # AIC ices models
 aic_ices <- AIC(fit_spr_m1, fit_her_m1, fit_sad_m1) |>
@@ -456,20 +365,21 @@ aic <- aic_ices |>
   rename("AIC<sub>spatial</sub>" = AIC_s,
          "AIC<sub>ICES rect</sub>" = AIC_r) |> 
   dplyr::select(-AIC_s2, -AIC_r2)
+
+aic
 ```
 
 ```{r tables}
 #| message: false
 #| warning: false
 
-kableExtra::kbl(sum_loglik_space, format = "markdown", caption = "5-fold Spatial cross validation") |>
+kableExtra::kbl(sum_loglik_space, format = "markdown", caption = "5-fold Spatial cross validation", digits = 2) |>
   kable_styling(font_size = 20)
 
-# kableExtra::kbl(sum_loglik_temp, format = "markdown", caption = "2-fold Temporal cross validation") |>
-#   kable_styling(font_size = 20)
-
-kableExtra::kbl(aic, format = "markdown", caption = "AIC") |>
+kableExtra::kbl(aic, format = "markdown", caption = "AIC", digits = 2) |>
   kable_styling(font_size = 20)
+
+# TODO: it seems perhaps ?kbl doesn't obey rounding when I use **. Make table in word instead for the report
 ```
 
 # Check residuals and from selected models
@@ -480,25 +390,23 @@ summary(fit_spr_m2)
 summary(fit_her_m2)
 summary(fit_sad_m2)
 
-df |> filter(year == 2018) |> distinct(FR_sad)
-
 # Residuals
-spr_res <- mcmc_res <- residuals(fit_spr_m2, type = "mle-mcmc",
-                                 mcmc_samples = sdmTMBextra::predict_mle_mcmc(fit_spr_m2,
-                                                                              mcmc_iter = 201,
-                                                                              mcmc_warmup = 200))
+spr_res <- residuals(fit_spr_m2, type = "mle-mcmc", 
+                     mcmc_samples = sdmTMBextra::predict_mle_mcmc(fit_spr_m2,
+                                                                  mcmc_iter = 201,
+                                                                  mcmc_warmup = 200))
 df$spr_res <- as.vector(spr_res)
 
-her_res <- mcmc_res <- residuals(fit_her_m2, type = "mle-mcmc",
-                                 mcmc_samples = sdmTMBextra::predict_mle_mcmc(fit_her_m2,
-                                                                              mcmc_iter = 201,
-                                                                              mcmc_warmup = 200))
+her_res <- residuals(fit_her_m2, type = "mle-mcmc",
+                     mcmc_samples = sdmTMBextra::predict_mle_mcmc(fit_her_m2,
+                                                                  mcmc_iter = 201,
+                                                                  mcmc_warmup = 200))
 df$her_res <- as.vector(her_res)
 
-sad_res <- mcmc_res <- residuals(fit_sad_m2, type = "mle-mcmc",
-                                 mcmc_samples = sdmTMBextra::predict_mle_mcmc(fit_sad_m2,
-                                                                              mcmc_iter = 201,
-                                                                              mcmc_warmup = 200))
+sad_res <- residuals(fit_sad_m2, type = "mle-mcmc",
+                     mcmc_samples = sdmTMBextra::predict_mle_mcmc(fit_sad_m2,
+                                                                  mcmc_iter = 201,
+                                                                  mcmc_warmup = 200))
 df$sad_res <- as.vector(sad_res)
 
 # Plot all together
@@ -513,6 +421,8 @@ df |>
   stat_qq_line() +
   labs(y = "Sample Quantiles", x = "Theoretical Quantiles") +
   theme(aspect.ratio = 1)
+
+ggsave(paste0(home, "/figures/supp/diet_qq.pdf"), width = 17, height = 11, units = "cm")
 ```
 
 # Plot conditional effects, random effects and spatial predictions
@@ -580,19 +490,19 @@ vis_dat <- bind_rows(d_dep, d_mon, d_len)
 ggplot(vis |> filter(!var == "Month"), aes(x = x, y = visregFit)) + 
   facet_grid(var ~ species) + 
   geom_point(data = vis_dat |> filter(!var == "Month"), aes(x = x, y = visregRes),
-             alpha = 0.3, color = "gray50") +
+             alpha = 0.3, color = "gray50", size = 0.2) +
   geom_ribbon(aes(ymin = visregLwr, ymax = visregUpr), alpha = 0.3, color = NA) +
   geom_line(color = "steelblue", linewidth = 1) + 
   labs(x = "Scaled variable", y = "Prediction") +
   NULL
 
-ggsave(paste0(home, "/figures/conditional.pdf"), width = 17, height = 11, units = "cm")
+ggsave(paste0(home, "/figures/supp/conditional.pdf"), width = 17, height = 11, units = "cm")
 
 # Now do month (categorial)
 ggplot(vis |> filter(var == "Month"), aes(x = as.factor(x), y = visregFit)) + 
   facet_wrap(~ species) + # free grid?
   geom_jitter(data = vis_dat |> filter(var == "Month"), aes(x = as.factor(x), y = visregRes),
-             alpha = 0.1, color = "gray70") +
+              alpha = 0.15, color = "gray60", size = 0.2, height = 0) +
   geom_errorbar(aes(ymin = visregLwr, ymax = visregUpr), alpha = 0.6, color = "steelblue",
                 width = 0, linewidth = 1) +
   geom_point(color = "steelblue", size = 2) + 
@@ -600,7 +510,7 @@ ggplot(vis |> filter(var == "Month"), aes(x = as.factor(x), y = visregFit)) +
   theme(aspect.ratio = 5/6) +
   NULL
 
-ggsave(paste0(home, "/figures/conditional_month.pdf"), width = 17, height = 6, units = "cm")
+ggsave(paste0(home, "/figures/supp/conditional_month.pdf"), width = 17, height = 6, units = "cm")
 ```
 
 # Calculate indices
@@ -612,7 +522,7 @@ extra_time <- pred_grid |> filter(!year %in% df$year) |> distinct(year) |> pull(
 
 # Spatial random field
 fit_spr_m2_extra <- sdmTMB(
-  FR_spr ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f), 
+  FR_spr ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f),
   data = df,
   mesh = mesh,
   time = "year",
@@ -623,7 +533,7 @@ fit_spr_m2_extra <- sdmTMB(
   family = tweedie(link = "log"))
 
 fit_her_m2_extra <- sdmTMB(
-  FR_her ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f), 
+  FR_her ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f),
   data = df,
   mesh = mesh,
   time = "year",
@@ -634,7 +544,7 @@ fit_her_m2_extra <- sdmTMB(
   family = tweedie(link = "log"))
 
 fit_sad_m2_extra <- sdmTMB(
-  FR_sad ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f), 
+  FR_sad ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f),
   data = df,
   mesh = mesh,
   time = "year",
@@ -652,9 +562,9 @@ pred_sad <- predict(fit_sad_m2_extra, newdata = pred_grid, return_tmb_object = T
 # Make temporal index!
 ncells <- filter(pred_grid, year == max(pred_grid$year)) |> nrow()
 
-index_spr <- get_index(pred_spr, area = rep(1/ncells, nrow(pred_spr$data)))
-index_her <- get_index(pred_her, area = rep(1/ncells, nrow(pred_her$data)))
-index_sad <- get_index(pred_sad, area = rep(1/ncells, nrow(pred_sad$data)))
+index_spr <- get_index(pred_spr, area = rep(1/ncells, nrow(pred_spr$data)), bias_correct = TRUE)
+index_her <- get_index(pred_her, area = rep(1/ncells, nrow(pred_her$data)), bias_correct = TRUE)
+index_sad <- get_index(pred_sad, area = rep(1/ncells, nrow(pred_sad$data)), bias_correct = TRUE)
 
 # Make long
 index <- bind_rows(index_spr |> mutate(prey = "Sprat"),
@@ -664,15 +574,191 @@ index <- bind_rows(index_spr |> mutate(prey = "Sprat"),
 
 # For comparison with data
 df_sum <- df |>
-  group_by(year) |>
-  summarise(Sprat = mean(FR_spr),
-            Herring = mean(FR_her),
-            Saduria = mean(FR_sad)) |> 
-  pivot_longer(c("Sprat", "Herring", "Saduria"), names_to = "prey", values_to = "mean_fr")
+  pivot_longer(c("FR_spr", "FR_her", "FR_sad"), names_to = "prey", values_to = "fr") |> # because the model cannot predict the large tails!
+  group_by(prey) |> 
+  mutate(upr = quantile(fr, probs = 0.99)) |> 
+  ungroup() |> 
+  filter(fr < upr) |> 
+  group_by(year, prey) |>
+  summarise(mean_fr = mean(fr, na.rm = TRUE)) |> 
+  mutate(prey = ifelse(prey == "FR_spr", "Sprat", prey),
+         prey = ifelse(prey == "FR_her", "Herring", prey),
+         prey = ifelse(prey == "FR_sad", "Saduria", prey))
+  
+index |> 
+  ggplot(aes(year, est, fill = Observed)) +
+  geom_point(shape = 21, alpha = 0.7) +
+  scale_fill_manual(values = c("white", "grey10")) +
+  facet_wrap(~factor(prey, levels = c("Sprat", "Herring", "Saduria")), ncol = 3, scales = "free") + 
+  geom_errorbar(aes(ymin = lwr, ymax = upr), alpha = 0.4, width = 0) +
+  geom_point(data = df_sum, aes(year, mean_fr, color = "Data"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  labs(x = "Year", y = "Per capita predation", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  theme_sleek(base_size = 9) +
+  theme(legend.position = "bottom")
+
+ggsave(paste0(home, "/figures/supp/index_ci.pdf"), width = 17, height = 7, units = "cm")
+
+index |> 
+  mutate(upr = ifelse(prey == "Sprat" & upr > 0.015, 0.015, upr)) |> 
+  ggplot(aes(year, est)) +
+  geom_point(alpha = 0.7) + 
+  stat_smooth(method = "gam", formula = y~s(x, k=3), color = "steelblue") +
+  facet_wrap(~factor(prey, levels = c("Sprat", "Herring", "Saduria")), ncol = 3, scales = "free") + 
+  labs(x = "Year", y = "Per capita predation", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  theme_sleek(base_size = 9) +
+  theme(legend.position = c(0.9, 0.9))
+
+ggsave(paste0(home, "/figures/index.pdf"), width = 17, height = 7, units = "cm")
+```
+
+Sensitivity with respect to prediction grid
+
+```{r}
+nd_year <- data.frame(year = unique(pred_grid$year),
+                      depth_sc = 0, 
+                      pred_length_sc = 0, 
+                      month_f = as.factor(11))
+
+year_pred_spr <- predict(fit_spr_m2_extra, newdata = nd_year, re_form = NA, re_form_iid = NA, se_fit = TRUE)
+year_pred_her <- predict(fit_her_m2_extra, newdata = nd_year, re_form = NA, re_form_iid = NA, se_fit = TRUE)
+year_pred_sad <- predict(fit_sad_m2_extra, newdata = nd_year, re_form = NA, re_form_iid = NA, se_fit = TRUE)
+
+year_cond <- bind_rows(year_pred_spr |> mutate(prey = "Sprat"),
+                       year_pred_her |> mutate(prey = "Herring"),
+                       year_pred_sad |> mutate(prey = "Saduria"))
+
+year_cond <- year_cond |> mutate(data = ifelse(year %in% extra_time, "Missing", "Present"))
+
+# Save conditional effect of year
+p1 <- ggplot(year_cond |> filter(prey == "Sprat"), aes(year, exp(est), shape = data)) +
+  geom_errorbar(aes(year, ymax = exp(est + 1.96*est_se), ymin = exp(est - 1.96*est_se)), alpha = 0.2, width = 0,
+                color = "steelblue3") + 
+  geom_point(color = "steelblue3") + 
+  #facet_wrap(~factor(prey, levels = c("Sprat", "Herring", "Saduria")), ncol = 3, scales = "free") +
+  facet_wrap(~factor(prey, levels = c("Sprat", "Herring", "Saduria")), ncol = 3) + 
+  labs(x = "", y = "", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  scale_shape_manual(values = c(21, 16)) +
+  guides(shape = "none") +
+  coord_cartesian(ylim = c(0, 0.017)) +
+  theme_sleek(base_size = 9) +
+  theme(legend.position = c(0.9, 0.9))
+
+p1
+
+p2 <- ggplot(year_cond |> filter(prey == "Herring"), aes(year, exp(est), shape = data)) +
+  geom_errorbar(aes(year, ymax = exp(est + 1.96*est_se), ymin = exp(est - 1.96*est_se)), alpha = 0.2, width = 0,
+                color = "steelblue3") + 
+  geom_point(color = "steelblue3") + 
+  #facet_wrap(~factor(prey, levels = c("Sprat", "Herring", "Saduria")), ncol = 3, scales = "free") +
+  facet_wrap(~factor(prey, levels = c("Sprat", "Herring", "Saduria")), ncol = 3) + 
+  labs(x = "", y = "Per capita predation", shape = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  scale_shape_manual(values = c(21, 16)) +
+  coord_cartesian(ylim = c(0, 0.008)) +
+  theme_sleek(base_size = 9) +
+  theme(legend.position = c(0.9, 0.9))
+
+p2
+
+p3 <- ggplot(year_cond |> filter(prey == "Saduria"), aes(year, exp(est), shape = data)) +
+  geom_errorbar(aes(year, ymax = exp(est + 1.96*est_se), ymin = exp(est - 1.96*est_se)), alpha = 0.2, width = 0,
+                color = "steelblue3") + 
+  geom_point(color = "steelblue3") + 
+  #facet_wrap(~factor(prey, levels = c("Sprat", "Herring", "Saduria")), ncol = 3, scales = "free") +
+  facet_wrap(~factor(prey, levels = c("Sprat", "Herring", "Saduria")), ncol = 3) + 
+  labs(x = "Year", y = "", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  scale_shape_manual(values = c(21, 16)) +
+  guides(shape = "none") +
+  coord_cartesian(ylim = c(0, 0.0012)) +
+  theme_sleek(base_size = 9) +
+  theme(legend.position = c(0.9, 0.9))
+
+p3
+
+# p1 + p2 + p3
+# 
+# ggsave(paste0(home, "/figures/conditional_year.pdf"), width = 17, height = 7, units = "cm")
+
+p1 / p2 / p3
+
+ggsave(paste0(home, "/figures/conditional_year2.pdf"), width = 11, height = 17, units = "cm")
 
 
-sort(unique(index$year))
-sort(unique(pred_grid$year))
+
+
+# Predict on full grid (not depth-trimmed) and calculate index
+pred_grid2 <- 
+  bind_rows(read_csv(paste0(home, "/data/clean/pred_grid_(1_2).csv")),
+            read_csv(paste0(home, "/data/clean/pred_grid_(2_2).csv"))) |> 
+  filter(quarter == 4) |> # Not needed in theory for saduria...
+  mutate(depth_sc = (depth - mean(df$depth)) / sd(df$depth),
+         year_f = as.factor(year),
+         month_f = as.factor(3),
+         year = as.integer(year),
+         pred_length_sc = 0,
+         ices_rect = as.factor(ices_rect)) |> 
+  droplevels()
+
+# Predict on grid, for indices and maps
+pred_spr2 <- predict(fit_spr_m2_extra, newdata = pred_grid2, return_tmb_object = TRUE)
+pred_her2 <- predict(fit_her_m2_extra, newdata = pred_grid2, return_tmb_object = TRUE)
+pred_sad2 <- predict(fit_sad_m2_extra, newdata = pred_grid2, return_tmb_object = TRUE)
+
+# Make temporal index!
+ncells2 <- filter(pred_grid2, year == max(pred_grid2$year)) |> nrow()
+
+index_spr2 <- get_index(pred_spr2, area = rep(1/ncells2, nrow(pred_spr2$data)), bias_correct = TRUE)
+index_her2 <- get_index(pred_her2, area = rep(1/ncells2, nrow(pred_her2$data)), bias_correct = TRUE)
+index_sad2 <- get_index(pred_sad2, area = rep(1/ncells2, nrow(pred_sad2$data)), bias_correct = TRUE)
+
+# Make long
+index2 <- bind_rows(index_spr2 |> mutate(prey = "Sprat"),
+                    index_her2 |> mutate(prey = "Herring"),
+                    index_sad2 |> mutate(prey = "Saduria")) |> 
+  mutate(Observed = ifelse(year %in% extra_time, "No", "Yes"))
+
+# Calculate the index for the most common ices rectangles, the ones that cumulatively make up most stomach samples!
+common_rects <- df |> 
+  mutate(n = n()) |> 
+  group_by(ices_rect) |> 
+  summarise(n_rec = n()) |>
+  ungroup() |> 
+  arrange(desc(n_rec)) |> 
+  mutate(cumsum = cumsum(n_rec),
+         sum = sum(n_rec),
+         perc = cumsum / sum) |> 
+  filter(perc < 0.9)
+
+common_rects
+  
+pred_grid3 <- filter(pred_grid, ices_rect %in% common_rects$ices_rect)
+
+plot_map + 
+  geom_raster(data = pred_grid3 |> filter(year == 2000),
+              aes(X*1000, Y*1000, fill = ices_rect)) + 
+  geom_point(data = dd_plot, aes(X*1000, Y*1000, size = sample_size), alpha = 0.5) +
+  scale_size(range = c(.01, 2), name = "# stomachs")
+
+pred_spr3 <- predict(fit_spr_m2_extra, newdata = pred_grid3, return_tmb_object = TRUE)
+pred_her3 <- predict(fit_her_m2_extra, newdata = pred_grid3, return_tmb_object = TRUE)
+pred_sad3 <- predict(fit_sad_m2_extra, newdata = pred_grid3, return_tmb_object = TRUE)
+
+# Make temporal index!
+ncells3 <- filter(pred_grid3, year == max(pred_grid3$year)) |> nrow()
+
+index_spr3 <- get_index(pred_spr3, area = rep(1/ncells3, nrow(pred_spr3$data)), bias_correct = TRUE)
+index_her3 <- get_index(pred_her3, area = rep(1/ncells3, nrow(pred_her3$data)), bias_correct = TRUE)
+index_sad3 <- get_index(pred_sad3, area = rep(1/ncells3, nrow(pred_sad3$data)), bias_correct = TRUE)
+
+# Make long
+index3 <- bind_rows(index_spr3 |> mutate(prey = "Sprat"),
+                    index_her3 |> mutate(prey = "Herring"),
+                    index_sad3 |> mutate(prey = "Saduria")) |> 
+  mutate(Observed = ifelse(year %in% extra_time, "No", "Yes"))
 
 
 index |> 
@@ -682,24 +768,206 @@ index |>
   facet_wrap(~prey, ncol = 1, scales = "free") + 
   geom_errorbar(aes(ymin = lwr, ymax = upr), alpha = 0.4, width = 0) +
   geom_point(data = df_sum, aes(year, mean_fr, color = "Data"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
-  labs(x = "Year", y = "Feeding ratio", color = "") +
-  scale_x_continuous(breaks = seq_range(unique(df$year), by = 3)) +
-  theme(legend.position = "bottom")
-
-ggsave(paste0(home, "/figures/supp/index_ci.pdf"), width = 11, height = 20, units = "cm")
-
-index |> 
-  mutate(upr = ifelse(prey == "Sprat" & upr > 0.015, 0.015, upr)) |> 
-  ggplot(aes(year, est)) +
-  geom_point(alpha = 0.7) + 
-  stat_smooth(method = "gam", formula = y~s(x, k=4), color = "steelblue") +
-  facet_wrap(~prey, ncol = 3, scales = "free") + 
+  geom_point(data = year_cond, aes(year, exp(est), color = "Conditional Year"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  geom_ribbon(data = year_cond, aes(year, exp(est), ymin = exp(est - 1.96*est_se), ymax = exp(est + 1.96*est_se),
+                                    color = "Conditional Year"), alpha = 0.3, inherit.aes = FALSE) +
+  geom_point(data = index2, aes(year, est, color = "Full grid index"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  geom_point(data = index3, aes(year, est, color = "Common grid index"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
   labs(x = "Year", y = "Feeding ratio", color = "") +
   scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
   theme_sleek(base_size = 9) +
-  theme(legend.position = c(0.9, 0.9))
+  theme(legend.position = "bottom")
 
-ggsave(paste0(home, "/figures/index.pdf"), width = 17, height = 6, units = "cm")
+ggsave(paste0(home, "/figures/supp/index_ci_sens.pdf"), width = 15, height = 30, units = "cm")
+
+# Is the mismatch between data and conditional simply because data happen to be in saduria-rich areas?
+saduria <- terra::rast(paste0(home, "/data/saduria-tif/FWBiomassm_raster_19812019presHighweightcor_no0_newZi.tif"))
+WGS84 <- "+proj=longlat +datum=WGS84"
+saduria_latlon <- terra::project(saduria, WGS84)
+density_saduria <- terra::extract(saduria_latlon, pred_grid %>% dplyr::select(lon, lat), method = "bilinear")
+
+pred_grid$density_saduria <- density_saduria$FWBiomassm_raster_19812019presHighweightcor_no0_newZi
+
+plot_map_fc + 
+  geom_raster(data = pred_grid, aes(X*1000, Y*1000, fill = density_saduria)) + 
+  geom_point(data = dd_plot, aes(X*1000, Y*1000, size = sample_size), alpha = 0.5, shape = 21, color = "pink") +
+  scale_size(range = c(.01, 2), name = "# stomachs") + 
+  scale_fill_viridis() + 
+  theme_sleek(base_size = 6) +
+  facet_wrap(~year, ncol = 5)
+
+ggsave(paste0(home, "/figures/supp/index_ci_saduria_map.pdf"), width = 17, height = 17, units = "cm")
+
+# What is the average saduria density at the location of the hauls over year?
+df_sad <- df
+
+density_saduria <- terra::extract(saduria_latlon, df_sad %>% dplyr::select(lon, lat), method = "bilinear")
+
+df_sad$density_saduria <- density_saduria$FWBiomassm_raster_19812019presHighweightcor_no0_newZi
+
+df_sad <- df_sad |> 
+  group_by(year) |> 
+  summarise(mean_saduria = mean(density_saduria))
+
+p1 <- ggplot(df_sad, aes(year, mean_saduria)) + 
+  geom_point() + 
+  geom_line() + 
+  NULL
+
+p2 <- ggplot(year_cond |> filter(prey == "Saduria"), aes(year, exp(est))) + 
+  geom_line() +
+  geom_point()
+
+p1 / p2
+
+year_cond2 <- year_cond |> filter(year %in% c(df_sad$year) & prey == "Saduria")
+
+plot(df_sad$mean_saduria ~ exp(year_cond2$est))
+
+# Somewhat good correlation but not perfect. This is not a direct test though, because it assumes they eat saduria in proportion...
+
+# Lastly, calculate the index for the rectangles that we have samples in each year...
+# Refit without extra time, because when we filter year_rectangles that are only in data, we don't have all years and cant fit to all years...
+fit_sad_m2_extra4 <- sdmTMB(
+  FR_sad ~ 0 + depth_sc + s(pred_length_sc, k=3) + (1|month_f),
+  data = df,
+  mesh = mesh,
+  time = "year",
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "off",
+  family = tweedie(link = "log"))
+
+summary(fit_sad_m2_extra4)
+
+df_saduria <- df |> mutate(year_rect_id = paste(year, ices_rect, sep = "."))
+
+pred_grid4 <- pred_grid |> 
+  mutate(year_rect_id = paste(year, ices_rect, sep = ".")) |> 
+  filter(year_rect_id %in% c(df_saduria$year_rect_id))
+
+plot_map_fc + 
+  geom_raster(data = pred_grid4, aes(X*1000, Y*1000, fill = ices_rect)) + 
+  facet_wrap(~year) + 
+  geom_point(data = df, aes(X*1000, Y*1000))
+
+pred_sad4 <- predict(fit_sad_m2_extra4, newdata = pred_grid4, return_tmb_object = TRUE)
+
+ncells4 <- filter(pred_grid4, year == max(pred_grid4$year)) |> nrow()
+
+index_sad4 <- get_index(pred_sad4, area = rep(1/ncells4, nrow(pred_sad4$data)), bias_correct = TRUE)
+
+manual_index <- pred_sad4$data |> 
+  group_by(year) |> 
+  summarise(index_manual = mean(exp(est)))
+
+index_sad4 |> 
+  ggplot(aes(year, est)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lwr, ymax = upr), alpha = 0.4, width = 0) +
+  geom_point(data = df_sum |> filter(prey == "Saduria"), aes(year, mean_fr, color = "Data"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  geom_point(data = manual_index, aes(year, index_manual, color = "Manual index"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  geom_point(data = year_cond |> filter(prey == "Saduria"), aes(year, exp(est), color = "Conditional Year"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  geom_ribbon(data = year_cond |> filter(prey == "Saduria"), aes(year, exp(est), ymin = exp(est - 1.96*est_se), ymax = exp(est + 1.96*est_se),
+                                    color = "Conditional Year"), alpha = 0.3, inherit.aes = FALSE) +
+  labs(x = "Year", y = "Feeding ratio", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  coord_cartesian(ylim = c(0, 0.015)) +
+  theme(legend.position = "bottom")
+
+# The only thing that could change the conditional from the index is depth I guess? And size
+t <- pred_grid4 |> 
+  group_by(year) |> 
+  summarise(mean_depth_sc = mean(depth_sc))
+
+df |> 
+  group_by(year) |> 
+  summarise(mean = mean(pred_length_sc)) |> 
+  ggplot(aes(year, mean)) + 
+  geom_point()
+
+# Make a new conditional with values closer to the prediction grid
+nd_year2 <- data.frame(year = unique(pred_grid4$year),
+                       depth_sc = t$mean_depth_sc, 
+                       pred_length_sc = 0, 
+                       month_f = as.factor(11))
+
+year_pred_sad2 <- predict(fit_sad_m2_extra4, newdata = nd_year2, re_form = NA, re_form_iid = NULL, se_fit = TRUE)
+
+index_sad4 |> 
+  ggplot(aes(year, est)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lwr, ymax = upr), alpha = 0.4, width = 0) +
+  geom_point(data = df_sum |> filter(prey == "Saduria"), aes(year, mean_fr, color = "Data"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  geom_point(data = manual_index, aes(year, index_manual, color = "Manual index"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  geom_point(data = year_pred_sad2, aes(year, exp(est), color = "Conditional Year"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  geom_ribbon(data = year_pred_sad2, aes(year, exp(est), ymin = exp(est - 1.96*est_se), ymax = exp(est + 1.96*est_se),
+                                    color = "Conditional Year"), alpha = 0.3, inherit.aes = FALSE) +
+  labs(x = "Year", y = "Feeding ratio", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  theme(legend.position = "bottom")
+
+
+index_sad4 |> 
+  ggplot(aes(year, est)) +
+  geom_line() +
+  geom_line(data = year_pred_sad2, aes(year, exp(est), color = "Conditional Year")) +
+  geom_line(data = year_pred_sad, aes(year, exp(est), color = "Conditional Year fixed")) +
+  labs(x = "Year", y = "Feeding ratio", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  theme(legend.position = "bottom")
+
+
+# Ok, now I can get the index and the conditional effect match, i.e., by setting depths to match. Can I get conditional to match data by setting depth, month and size to match?
+tt <- df |> 
+  group_by(month_f, year) |> 
+  summarise(n = n()) |> 
+  group_by(year) |> 
+  filter(n == max(n)) |> 
+  arrange(year)
+
+t <- df |> 
+  group_by(year) |> 
+  summarise(mean_depth_sc = mean(depth_sc),
+            mean_pred_length_sc = mean(pred_length_sc))
+
+nd_year3 <- data.frame(year = unique(df$year),
+                       depth_sc = t$mean_depth_sc, 
+                       pred_length_sc = t$mean_pred_length_sc, 
+                       month_f = tt$month_f) # Most common month!
+
+year_pred_sad3 <- predict(fit_sad_m2_extra4, newdata = nd_year3, re_form = NA, re_form_iid = NULL, se_fit = TRUE)
+
+ggplot() +
+  geom_point(data = df_sum |> filter(prey == "Saduria"), aes(year, mean_fr, color = "Data"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  geom_line(data = year_pred_sad3, aes(year, exp(est), color = "Conditional Year"), alpha = 0.6, inherit.aes = FALSE, shape = 2) +
+  geom_ribbon(data = year_pred_sad3, aes(year, exp(est), ymin = exp(est - 1.96*est_se), ymax = exp(est + 1.96*est_se),
+                                         color = "Conditional Year"), alpha = 0.3, inherit.aes = FALSE) +
+  labs(x = "Year", y = "Feeding ratio", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  theme(legend.position = "bottom")
+
+# Is the mean higher because I have tails that the model doesn't capture?
+df_sum2 <- df |>
+  filter(FR_sad < quantile(FR_sad, prob = 0.95)) |> 
+  group_by(year) |>
+  summarise(Saduria = mean(FR_sad))
+
+
+ggplot() +
+  geom_line(data = year_pred_sad3, aes(year, exp(est), color = "Conditional Year"), alpha = 0.6, inherit.aes = FALSE) +
+  geom_ribbon(data = year_pred_sad3, aes(year, exp(est), ymin = exp(est - 1.96*est_se), ymax = exp(est + 1.96*est_se),
+                                    fill = "Conditional Year"), alpha = 0.3, inherit.aes = FALSE, color = NA) +
+  geom_line(data = df_sum |> filter(prey == "Saduria"), aes(year, mean_fr, color = "Data"), alpha = 0.6, inherit.aes = FALSE) +
+  geom_line(data = df_sum2, aes(year, Saduria, color = "Data trimmed"), alpha = 0.6, inherit.aes = FALSE) +
+  labs(x = "Year", y = "Feeding ratio", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  theme(legend.position = "bottom")
+
+# YEEEESS FINALLY!!!
+# TODO: still I want to estimate the effect of index prediction vs conditional... 
+
+
 ```
 
 # Plot spatial predictions
@@ -717,9 +985,8 @@ plot_map +
   facet_wrap(~prey) +
   geom_sf(size = 0.1) + 
   theme_sleek(base_size = 9) + 
-  theme(legend.position = c(0.05, 0.65)) +
-  theme(legend.position = c(0.05, 0.7),
-        legend.key.height = unit(0.6, "line"),
+  theme(legend.position = c(0.1, 0.7)) +
+  theme(legend.key.height = unit(0.6, "line"),
         legend.key.width = unit(0.2, "line"))
 
 ggsave(paste0(home, "/figures/supp/diet_omega_s.pdf"), width = 17, height = 6, units = "cm")
@@ -728,7 +995,7 @@ ggsave(paste0(home, "/figures/supp/diet_omega_s.pdf"), width = 17, height = 6, u
 # Plot spatiotemporal predictions
 plot_map_fc +
   geom_raster(data = spatial_preds |> filter(prey == "Sprat"), aes(X*1000, Y*1000, fill = exp(est))) +
-  scale_fill_viridis(trans = "sqrt", name = "FR") +
+  scale_fill_viridis(trans = "sqrt", name = "FR sprat") +
   facet_wrap(~year) +
   geom_sf(size = 0.1)
 
@@ -736,7 +1003,7 @@ ggsave(paste0(home, "/figures/supp/sprat_spatiotemporal_diet.pdf"), width = 17, 
 
 plot_map_fc +
   geom_raster(data = spatial_preds |> filter(prey == "Herring"), aes(X*1000, Y*1000, fill = exp(est))) +
-  scale_fill_viridis(trans = "sqrt", name = "FR") +
+  scale_fill_viridis(trans = "sqrt", name = "FR herring") +
   facet_wrap(~year) +
   geom_sf(size = 0.1)
 
@@ -744,31 +1011,30 @@ ggsave(paste0(home, "/figures/supp/herring_spatiotemporal_diet.pdf"), width = 17
 
 plot_map_fc +
   geom_raster(data = spatial_preds |> filter(prey == "Saduria"), aes(X*1000, Y*1000, fill = exp(est))) +
-  scale_fill_viridis(trans = "sqrt", name = "FR") +
+  scale_fill_viridis(trans = "sqrt", name = "FR saduria") +
   facet_wrap(~year) +
   geom_sf(size = 0.1)
 
 ggsave(paste0(home, "/figures/supp/saduria_spatiotemporal_diet.pdf"), width = 17, height = 17, units = "cm")
 
-
 # Plot spatiotemporal predictions for a year and all species
 plot_map +
   geom_raster(data = spatial_preds|> filter(year == "2000"), aes(X*1000, Y*1000, fill = exp(est))) +
-  scale_fill_viridis(trans = "sqrt", name = "FR") +
-  facet_wrap(~prey) +
+  scale_fill_viridis(trans = "sqrt", name = "Per cap. predation") +
+  facet_wrap(~factor(prey, levels = c("Sprat", "Herring", "Saduria"))) +
   geom_sf(size = 0.1) + 
   theme_sleek(base_size = 9) + 
-  theme(legend.position = c(0.05, 0.7),
+  theme(legend.position = c(0.08, 0.7),
         legend.key.height = unit(0.6, "line"),
         legend.key.width = unit(0.2, "line"))
 
-ggsave(paste0(home, "/figures/supp/spatial_prey_prediction_2000.pdf"), width = 17, height = 6, units = "cm")
+ggsave(paste0(home, "/figures/spatial_prey_prediction_2000.pdf"), width = 17, height = 6, units = "cm")
 ```
 
-# Plot correlations between spatial overlap and population-level FR
+# Plot spatial overlap vs and populationa and per capita feeding
 
 ```{r}
-# Join feeding ratio indicies (per capita) and overlap
+# Join feeding ratio indices (per capita) and overlap
 cod_spr <- read_csv(paste0(home, "/output/cod_pel_sum_ovrlap.csv")) |>
   dplyr::select(year, cod_spr_ovr_tot) |> 
   rename(overlap = cod_spr_ovr_tot) |> 
@@ -795,15 +1061,44 @@ cod_pred <- read_csv(paste0(home, "/output/pred_cod.csv")) |>
   filter(quarter == 4)
 
 # Left join cod biomass density onto the grid of diet predictions
-spatial_preds_dens <- left_join(spatial_preds, cod_pred |>
-                                  dplyr::select(est, X, Y, year) |> 
-                                  rename(est_codbiom = est))
+spatial_preds_dens <- left_join(spatial_preds,
+                                cod_pred |> dplyr::select(est, X, Y, year) |> rename(est_codbiom = est))
 
-# Multiply local feeding ration with biomass density of cod
+# Multiply local feeding ratio with biomass density of cod
 spatial_preds_dens <- spatial_preds_dens |> 
+  drop_na(est_codbiom) |> 
   mutate(pred = exp(est) * est_codbiom)
 
-# Summarise across years
+# Plot map!
+plot_map +
+  geom_raster(data = spatial_preds_dens |> filter(year == "2000"), aes(X*1000, Y*1000, fill = pred)) +
+  scale_fill_viridis(trans = "sqrt", name = "Pop. predation") +
+  facet_wrap(~factor(prey, levels = c("Sprat", "Herring", "Saduria"))) +
+  geom_sf(size = 0.1) + 
+  theme_sleek(base_size = 9) + 
+  theme(legend.position = c(0.08, 0.7),
+        legend.key.height = unit(0.6, "line"),
+        legend.key.width = unit(0.2, "line"))
+
+ggsave(paste0(home, "/figures/spatial_pop_predation_prediction_2000.pdf"), width = 17, height = 6, units = "cm")
+
+# index? Just take the average
+spatial_preds_dens |> 
+  group_by(year, prey) |> 
+  summarise(mean_pop_pred = mean(pred)) |> 
+  ggplot(aes(year, mean_pop_pred)) +
+  geom_point(alpha = 0.7) + 
+  stat_smooth(method = "gam", formula = y~s(x, k=3), color = "steelblue") +
+  facet_wrap(~factor(prey, levels = c("Sprat", "Herring", "Saduria")), ncol = 3, scales = "free") + 
+  labs(x = "Year", y = "Population predation", color = "") +
+  scale_x_continuous(breaks = seq_range(unique(df$year), by = 8)) +
+  theme_sleek(base_size = 9) +
+  theme(legend.position = c(0.9, 0.9))
+
+ggsave(paste0(home, "/figures/pop_pred_index.pdf"), width = 17, height = 7, units = "cm")
+
+
+# Summarize across years
 spatial_preds_dens_sum <- spatial_preds_dens |> 
   group_by(prey, year) |> 
   summarise(tot_pred = sum(pred))
@@ -814,13 +1109,13 @@ index_ovr <- index_ovr |>
   drop_na()
 
 # Check some regressions...
-summary(lm(tot_pred ~ overlap, data = index_ovr |> filter(prey == "Sprat")))
-summary(lm(tot_pred ~ overlap, data = index_ovr |> filter(prey == "Herring")))
-summary(lm(tot_pred ~ overlap, data = index_ovr |> filter(prey == "Saduria")))
-
-summary(lm(est ~ overlap, data = index_ovr |> filter(prey == "Sprat")))
-summary(lm(est ~ overlap, data = index_ovr |> filter(prey == "Herring")))
-summary(lm(est ~ overlap, data = index_ovr |> filter(prey == "Saduria")))
+# summary(lm(tot_pred ~ overlap, data = index_ovr |> filter(prey == "Sprat")))
+# summary(lm(tot_pred ~ overlap, data = index_ovr |> filter(prey == "Herring")))
+# summary(lm(tot_pred ~ overlap, data = index_ovr |> filter(prey == "Saduria")))
+# 
+# summary(lm(est ~ overlap, data = index_ovr |> filter(prey == "Sprat")))
+# summary(lm(est ~ overlap, data = index_ovr |> filter(prey == "Herring")))
+# summary(lm(est ~ overlap, data = index_ovr |> filter(prey == "Saduria")))
 
 # Calculate correlations between FR, predation and overlap
 cor <- plyr::ddply(index_ovr, c("prey"),
@@ -828,38 +1123,41 @@ cor <- plyr::ddply(index_ovr, c("prey"),
                    cor_fr_ovr = round(cor(overlap, est), 2),
                    cor_pred_ovr = round(cor(overlap, tot_pred), 2)) |> 
   pivot_longer(c("cor_fr_ovr", "cor_pred_ovr")) |> 
-  mutate(name = ifelse(name == "cor_fr_ovr", "Feeding ratio", "Total predation"))
+  mutate(name = ifelse(name == "cor_fr_ovr", "Per capita", "Population"))
+
+p <- index_ovr |>
+  rename(fr = est) |> 
+  pivot_longer(c("fr", "tot_pred")) |> 
+  mutate(id = paste(name, prey, sep = ";")) %>%
+  split(.$id) |>
+  purrr::map(~lm(value ~ overlap, data = .x)) |>
+  purrr::map_df(broom::tidy, .id = 'id') |>
+  filter(term == 'overlap') |>
+  separate(id, sep = ";", into = c("name", "prey"), remove = FALSE) |> 
+  mutate(name = ifelse(name == "fr", "Per capita", "Population"))
+
+p
 
 # Plot!
-library(ggh4x)<
-
 index_ovr |> 
-  rename('Feeding ratio' = est, 
-         'Total predation' = tot_pred) |> 
-  pivot_longer(c('Feeding ratio', 'Total predation')) |> 
+  rename('Per capita' = est, 
+         'Population' = tot_pred) |> 
+  pivot_longer(c('Per capita', 'Population')) |> 
   ggplot(aes(overlap, value)) +
-  geom_point() +
-  #facet_wrap(name ~ prey, scales = "free") +
+  geom_point(alpha = 0.5) +
   ggh4x::facet_grid2(name ~ prey, scales = "free", independent = "y") +
-  geom_smooth(aes(overlap, value), inherit.aes = FALSE, color = "steelblue",
-              formula = y~s(x, k=10), method = "gam") +
-  geom_text(data = cor,
-            aes(label = paste("r=", value, sep = "")), x = -Inf, y = Inf, hjust = -.1, vjust = 2.5,
+  # geom_text(data = cor,
+  #           aes(label = paste("r=", value, sep = "")), x = -Inf, y = Inf, hjust = -.1, vjust = 2.5,
+  #           inherit.aes = FALSE, fontface = "italic", size = 2.5, color = "tomato3") +
+  geom_text(data = p,
+            aes(label = paste("p=", round(p.value, digits = 3), sep = "")), x = -Inf, y = Inf, hjust = -.1, vjust = 2.5,
             inherit.aes = FALSE, fontface = "italic", size = 2.5, color = "tomato3") +
-  labs(y = "Population-level feeding ratio", x = "Spatial overlap", color = "Year") +
+  labs(y = "Predation", x = "Spatial overlap", color = "Year") +
   theme_sleek(base_size = 9) +
   theme(legend.position = "bottom", aspect.ratio = 1) +
   NULL
 
-# Summarise the differences here, make fake facet grid free axis
+# Summarize the differences here, make fake facet grid free axis
 
 ggsave(paste0(home, "/figures/fr_overlap_cor.pdf"), width = 17, height = 11, units = "cm")
 ```
-
-TODO:
-
-- there are new data in the db that are not in stefans data also for the older period. find a way to not get duplicates.
-- update as I get more data
-- explore the spatial effects more
-- make a clean, straight script for all species that produces the plots for the report
-

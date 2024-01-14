@@ -27,7 +27,7 @@ execute:
 
 library(sdmTMB)
 
-pkgs <- c("tidyverse", "RCurl", "viridis", "devtools", "terra", "readxl", "mapplots", "tidylog") 
+pkgs <- c("tidyverse", "RCurl", "viridis", "devtools", "terra", "readxl", "mapplots", "tidylog", "patchwork") 
 
 # minpack.lm needed if using nlsLM()
 if(length(setdiff(pkgs,rownames(installed.packages()))) > 0){
@@ -85,6 +85,15 @@ plot_map_fc +
   scale_fill_viridis(trans = "sqrt", name = "Saduria biomass density")
 
 ggsave(paste0(home, "/figures/supp/spatial_saduria_biomass.pdf"), width = 17, height = 17, units = "cm")
+
+cod_pred |> 
+  drop_na(density_saduria) |> 
+  filter(year == 2015) |> 
+  group_by(sub_div) |> 
+  summarise(mean_saduria = mean(density_saduria)) |> 
+  arrange(desc(mean_saduria))
+
+# interesting! especially given that cod are moving here, this could explain the higher overlap. also interesting that ocygen hasn't decline here substantially
 ```
 
 Pelagics
@@ -400,7 +409,19 @@ plot_map_fc +
                      na.value = "#DEF5E5FF", limits = c(0, quantile(filter(cod_pel, year < 2020)$cod_spr_ovr, 0.999))) +
   labs(caption = paste("maximum estimated overlap =", round(max(filter(cod_pel, year < 2020)$cod_spr_ovr), digits = 3)))
 
-ggsave(paste0(home, "/figures/spr_overlap_space.pdf"), width = 17, height = 17, units = "cm")
+ggsave(paste0(home, "/figures/supp/spr_overlap_space.pdf"), width = 17, height = 17, units = "cm")
+
+# Sprat
+p1 <- plot_map_fc + 
+  geom_raster(data = cod_pel |> filter(year %in% c(2000, 2019)),
+              aes(X*1000, Y*1000, fill = cod_spr_ovr)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Cod-Sprat overlap (ICES Rect.)",
+                     option = "mako") #+ #,
+                         # trim extreme high values to make spatial variation more visible
+                     #na.value = "#DEF5E5FF", limits = c(0, quantile(filter(cod_pel, year < 2020)$cod_spr_ovr, 0.999))) +
+  #labs(caption = paste("maximum estimated overlap =", round(max(filter(cod_pel, year < 2020)$cod_spr_ovr), digits = 3)))
+
 
 plot_map_fc + 
   geom_raster(data = cod_pel |> filter(year < 2020),
@@ -422,7 +443,17 @@ plot_map_fc +
                      na.value = "#DEF5E5FF", limits = c(0, quantile(filter(cod_pel, year < 2020)$cod_her_ovr, 0.999))) +
   labs(caption = paste("maximum estimated overlap =", round(max(filter(cod_pel, year < 2020)$cod_her_ovr), digits = 3)))
 
-ggsave(paste0(home, "/figures/her_overlap_space.pdf"), width = 17, height = 17, units = "cm")
+ggsave(paste0(home, "/figures/supp/her_overlap_space.pdf"), width = 17, height = 17, units = "cm")
+
+p2 <- plot_map_fc + 
+  geom_raster(data = cod_pel |> filter(year %in% c(2000, 2019)),
+              aes(X*1000, Y*1000, fill = cod_her_ovr)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(trans = "sqrt", name = "Cod-Herring overlap (ICES Rect.)",
+                     option = "mako") #+ #,
+  #                        # trim extreme high values to make spatial variation more visible
+  #                    na.value = "#DEF5E5FF", limits = c(0, quantile(filter(cod_pel, year < 2020)$cod_her_ovr, 0.999))) +
+  #labs(caption = paste("maximum estimated overlap =", round(max(filter(cod_pel, year < 2020)$cod_her_ovr), digits = 3)))
 
 plot_map_fc + 
   geom_raster(data = cod_pel |> filter(year < 2020),
@@ -443,7 +474,14 @@ plot_map_fc +
   facet_wrap(~year) + 
   scale_fill_viridis(name = "Cod-Saduria overlap", trans = "sqrt", option = "mako")
 
-ggsave(paste0(home, "/figures/sad_overlap_space_q4.pdf"), width = 17, height = 17, units = "cm")
+ggsave(paste0(home, "/figures/supp/sad_overlap_space_q4.pdf"), width = 17, height = 17, units = "cm")
+
+p3 <- plot_map_fc + 
+  geom_raster(data = cod_ben |> filter(year %in% c(2000, 2019) & quarter == 4),
+              aes(X*1000, Y*1000, fill = cod_sad_ovr)) +
+  facet_wrap(~year) + 
+  scale_fill_viridis(name = "Cod-Saduria overlap", trans = "sqrt", option = "mako")
+
 
 plot_map_fc + 
   geom_raster(data = cod_ben |> filter(year < 2020 & quarter == 1),
@@ -452,6 +490,51 @@ plot_map_fc +
   scale_fill_viridis(name = "Cod-Saduria overlap", trans = "sqrt", option = "mako")
 
 ggsave(paste0(home, "/figures/supp/sad_overlap_space_q1.pdf"), width = 17, height = 17, units = "cm")
+
+# Spatial overlap for all three species
+p1 + p2 + p3
+#ggsave(paste0(home, "/figures/overlap_all_2000_2019.pdf"), width = 23, height = 9, units = "cm")
+
+# p1 / p2 / p3
+# ggsave(paste0(home, "/figures/overlap_all_2000_2019.pdf"), width = 11, height = 22, units = "cm")
+
+(p1 + facet_wrap(~year, ncol = 1)) + (p2  + facet_wrap(~year, ncol = 1)) + (p3  + facet_wrap(~year, ncol = 1)) +
+  plot_annotation(tag_level = "A") & theme(legend.text = element_text(size = 6.5),
+                                           legend.title = element_text(size = 9))
+
+ggsave(paste0(home, "/figures/overlap_all_2000_2019.pdf"), width = 22, height = 12, units = "cm")
+```
+
+## Centre of gravity of overlap?
+
+```{r}
+spr_cog <- cod_pel |> 
+  group_by(year) |> 
+  summarise(Xw = weighted.mean(X, cod_spr_ovr),
+            Yw = weighted.mean(Y, cod_spr_ovr)) |> 
+  mutate(species = "Sprat")
+
+her_cog <- cod_pel |> 
+  group_by(year) |> 
+  summarise(Xw = weighted.mean(X, cod_her_ovr),
+            Yw = weighted.mean(Y, cod_her_ovr)) |> 
+  mutate(species = "Herring")
+  
+sad_cog <- cod_ben |> 
+  group_by(year) |> 
+  summarise(Xw = weighted.mean(X, cod_sad_ovr),
+            Yw = weighted.mean(Y, cod_sad_ovr)) |> 
+  mutate(species = "Saduria")
+
+cogs <- bind_rows(spr_cog, her_cog, sad_cog)
+
+plot_map_fc + 
+  geom_point(data = cogs, aes(Xw*1000, Yw*1000, color = year), size = 0.6) + 
+  geom_line(data = cogs, aes(Xw*1000, Yw*1000, color = year), linewidth = 0.3) + 
+  facet_wrap(~factor(species, levels = c("Sprat", "Herring", "Saduria"))) + 
+  labs(color = "Year")
+
+ggsave(paste0(home, "/figures/cogs.pdf"), width = 17, height = 9, units = "cm")
 ```
 
 Plot overlap over time
@@ -467,29 +550,59 @@ pel_annual <- cod_pel |>
   mutate(Species = ifelse(name %in% c("cod_spr_ovr_tot", "cod_spr_ovr_sd_tot"), "Sprat", "Herring")) |> 
   mutate(Scale = ifelse(name %in% c("cod_her_ovr_sd_tot", "cod_spr_ovr_sd_tot"), "Subdivision", "ICES Rect."))
 
-ggplot(data = pel_annual, aes(year, value, color = Scale, fill = Scale)) +
+p1 <- ggplot(data = pel_annual, aes(year, value, color = Scale, fill = Scale)) +
   geom_point(alpha = 0.5) +
   geom_line(alpha = 0.5) + 
   geom_smooth(method = "gam", formula = y~s(x, k = 4), alpha = 0.2) + 
   scale_fill_brewer(palette = "Set1") +
   scale_color_brewer(palette = "Set1") +
-  labs(x = "Year", y = "Biomass-weighted overlap index") +
+  labs(x = "Year", y = "Overlap index") +
   facet_wrap(~ Species) +
-  theme(legend.position = c(0.42, 0.12))
+  coord_cartesian(ylim = c(0.15, 0.8)) +
+  theme(legend.position = c(0.6, 0.86))
 
+p1
 ggsave(paste0(home, "/figures/pelagic_overlap.pdf"), width = 17, height = 9, units = "cm")
 
 # Saduria
-cod_ben_sum |> 
+p2 <- cod_ben_sum |> 
   mutate(quart_lab = ifelse(quarter == 1, "Quarter 1", "Quarter 4")) |> 
   ggplot(aes(year, cod_sad_ovr_tot, color = quart_lab, fill = quart_lab)) +
   geom_point(alpha = 0.5) +
   geom_line(alpha = 0.5) + 
   geom_smooth(method = "gam", formula = y~s(x, k = 4), alpha = 0.2) + 
-  labs(x = "Year", y = "Biomass-weighted overlap index", color = "", fill = "") +
+  labs(x = "Year", y = "Overlap index", color = "", fill = "") +
   scale_fill_brewer(palette = "Set1") +
-  scale_color_brewer(palette = "Set1")
+  scale_color_brewer(palette = "Set1") + 
+  coord_cartesian(ylim = c(0.15, 0.8)) +
+  theme(legend.position = c(0.8, 0.15))
 
-ggsave(paste0(home, "/figures/saduria_overlap.pdf"), width = 11, height = 7, units = "cm")
+p2
+
+ggsave(paste0(home, "/figures/saduria_overlap.pdf"), width = 11, height = 9, units = "cm")
+
+# Combined plot
+p1 + p2 + plot_annotation(tag_levels = "A") + plot_layout(widths = c(2, 1))
+
+ggsave(paste0(home, "/figures/annual_overlap2.pdf"), width = 17, height = 9, units = "cm")
+
+annual_ovr <- bind_rows(pel_annual |> filter(Scale == "ICES Rect."),
+                        cod_ben_sum |> filter(quarter == 4) |>
+                          rename(value = cod_sad_ovr_tot) |> 
+                          mutate(name = "cod_sad_ovr_tot", 
+                                 Species = "Saduria"))
+
+p3 <- ggplot(data = annual_ovr, aes(year, value)) +
+  geom_point(alpha = 0.7) + 
+  geom_smooth(method = "gam", formula = y~s(x, k = 4), alpha = 0.2, color = "steelblue") + 
+  scale_fill_brewer(palette = "Set1") +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = "Year", y = "Overlap index") +
+  facet_wrap(~factor(Species, levels = c("Sprat", "Herring", "Saduria"))) +
+  theme(legend.position = c(0.6, 0.86))
+
+p3
+
+ggsave(paste0(home, "/figures/annual_overlap2.pdf"), width = 17, height = 7, units = "cm")
 ```
 

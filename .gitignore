@@ -57,12 +57,19 @@ data/clean/catch_by_length.csv
 
 # Reports
 WKSPATIAL - Report of the Workshop on Spatial Analyses for the Baltic Sea_2015.pdf
+ecog12909-sup-0001-appendixs1.docx
 
 # Output
 output/
 
+# Decktape
+decktape/
+
 # Data
 data/
+
+# Old exploratory stuff
+*/old
 
 # Supp figures
 figures/supp/cpue_oxygen_rasters/
