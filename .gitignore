@@ -44,16 +44,18 @@ vignettes/*.pdf
 **.log
 
 # Data
-data/DATRAS_exchange/
-data/from_ale/
-data/depth_geo_tif
-data/gear_standardization/
-data/ICES_StatRec_mapto_ICES_Areas/
-data/NEMO_Nordic_SCOBI/
-data/NEMO_Nordic_SCOBI/
-data/substrate_tif/
-
+data/DATRAS-exchange/
+data/from-ale/
+data/depth-geo_tif
+data/gear-standardization/
+data/ICES-StatRec-mapto-ICES-Areas/
+data/NEMO
+data/nemo_copernicus.png
+data/substrate-tif/
+data/saduria-tif/
 data/clean/catch_by_length.csv
+data/bias
+data/Mean depth natural colour (with land).nc
 
 # Reports
 WKSPATIAL - Report of the Workshop on Spatial Analyses for the Baltic Sea_2015.pdf
@@ -67,16 +69,11 @@ output/
 decktape/
 
 # Data
-data/
-
 # Old exploratory stuff
 */old
 
 # Supp figures
 figures/supp/cpue_oxygen_rasters/
-
-# Depth nc file
-data/Mean depth natural colour (with land).nc
 
 # Meetings
 meetings/
