@@ -2,6 +2,8 @@ library(sf)
 # Packages not on CRAN
 # devtools::install_github("seananderson/ggsidekick") # not on CRAN 
 library(ggsidekick)
+library(rnaturalearth)
+library(rnaturalearthdata)
 
 theme_set(theme_sleek())
 
@@ -11,7 +13,7 @@ sf::sf_use_s2(FALSE)
 ymin = 52; ymax = 60.5; xmin = 10; xmax = 24
 
 map_data <- rnaturalearth::ne_countries(
-  scale = "medium",
+  scale = "large",
   returnclass = "sf", continent = "europe")
 
 # Crop the polygon for plotting and efficiency:
@@ -45,7 +47,7 @@ xmax2 <- 916000
 xrange <- xmax2 - xmin2
 
 ymin2 <- 5980000
-ymax2 <- 6450000
+ymax2 <- 6500000
 yrange <- ymax2 - ymin2
 
 plot_map <- 
@@ -89,5 +91,3 @@ plot_map_labels_fc <-
   annotate("text", label = "Russia", x = xmin2 + 0.95*xrange, y = ymin2 + 0.18*yrange, color = "gray50", size = 1.9) +
   annotate("text", label = "Lithuania", x = xmin2 + 1*xrange, y = ymin2 + 0.43*yrange, color = "gray50", size = 1.9, angle = 75) +
   annotate("text", label = "Latvia", x = xmin2 + 0.99*xrange, y = ymin2 + 0.65*yrange, color = "gray50", size = 1.9, angle = 75)
-
-# Diet map plot here!
