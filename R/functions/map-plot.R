@@ -42,7 +42,7 @@ theme_facet_map <- function(base_size = 11, base_family = "") {
 }
 
 # Make default base map plot
-xmin2 <- 303000
+xmin2 <- 380000
 xmax2 <- 916000
 xrange <- xmax2 - xmin2
 
