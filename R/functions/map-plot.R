@@ -34,20 +34,22 @@ theme_facet_map <- function(base_size = 11, base_family = "") {
       legend.direction = "horizontal",
       legend.margin = margin(1, 1, 1, 1),
       legend.box.margin = margin(0, 0, 0, 0),
-      legend.key.height = unit(0.4, "line"),
-      legend.key.width = unit(2, "line"),
       legend.spacing.x = unit(0.1, 'cm'),
-      legend.position = "bottom",
+      legend.position.inside = c(0.82, 0.04),
+      legend.key.width = unit(1, "cm"),
+      legend.key.height = unit(0.3, "cm"),
+      legend.text = element_text(size = 6),
+      legend.title = element_text(size = 8)
     )
 }
 
 # Make default base map plot
-xmin2 <- 380000
-xmax2 <- 916000
+xmin2 <- 357200
+xmax2 <- 918748
 xrange <- xmax2 - xmin2
 
 ymin2 <- 5980000
-ymax2 <- 6500000
+ymax2 <- 6501300
 yrange <- ymax2 - ymin2
 
 plot_map <- 
@@ -67,27 +69,9 @@ plot_map_fc <-
   ylim(ymin2, ymax2) +
   labs(x = "Longitude", y = "Latitude") +
   geom_sf(size = 0.3, color = "gray80") + 
+  facet_wrap(~year) +
   theme_facet_map() +
-  guides(colour = guide_colorbar(title.position = "top", title.hjust = 0.5),
-         fill = guide_colorbar(title.position = "top", title.hjust = 0.5)) +
+  guides(colour = guide_colorbar(position = "inside", title.position = "top", title.hjust = 0.5),
+         fill = guide_colorbar(position = "inside", title.position = "top", title.hjust = 0.5)) +
   NULL
 
-plot_map_labels <- 
-  plot_map + 
-  annotate("text", label = "Sweden", x = xmin2 + 0.25*xrange, y = ymin2 + 0.75*yrange, color = "gray50", size = 1.9) +
-  annotate("text", label = "Denmark", x = xmin2 + 0.029*xrange, y = ymin2 + 0.32*yrange, color = "gray50", size = 1.9, angle = 75) +
-  annotate("text", label = "Germany", x = xmin2 + 0.07*xrange, y = ymin2 + 0.022*yrange, color = "gray50", size = 1.9) +
-  annotate("text", label = "Poland", x = xmin2 + 0.55*xrange, y = ymin2 + 0.08*yrange, color = "gray50", size = 1.9) +
-  annotate("text", label = "Russia", x = xmin2 + 0.95*xrange, y = ymin2 + 0.18*yrange, color = "gray50", size = 1.9) +
-  annotate("text", label = "Lithuania", x = xmin2 + 1*xrange, y = ymin2 + 0.43*yrange, color = "gray50", size = 1.9, angle = 75) +
-  annotate("text", label = "Latvia", x = xmin2 + 0.99*xrange, y = ymin2 + 0.65*yrange, color = "gray50", size = 1.9, angle = 75)
-
-plot_map_labels_fc <- 
-  plot_map_fc + 
-  annotate("text", label = "Sweden", x = xmin2 + 0.25*xrange, y = ymin2 + 0.75*yrange, color = "gray50", size = 1.9) +
-  annotate("text", label = "Denmark", x = xmin2 + 0.029*xrange, y = ymin2 + 0.32*yrange, color = "gray50", size = 1.9, angle = 75) +
-  annotate("text", label = "Germany", x = xmin2 + 0.07*xrange, y = ymin2 + 0.022*yrange, color = "gray50", size = 1.9) +
-  annotate("text", label = "Poland", x = xmin2 + 0.55*xrange, y = ymin2 + 0.08*yrange, color = "gray50", size = 1.9) +
-  annotate("text", label = "Russia", x = xmin2 + 0.95*xrange, y = ymin2 + 0.18*yrange, color = "gray50", size = 1.9) +
-  annotate("text", label = "Lithuania", x = xmin2 + 1*xrange, y = ymin2 + 0.43*yrange, color = "gray50", size = 1.9, angle = 75) +
-  annotate("text", label = "Latvia", x = xmin2 + 0.99*xrange, y = ymin2 + 0.65*yrange, color = "gray50", size = 1.9, angle = 75)
