@@ -23,23 +23,25 @@ Make an evenly spaced UTM prediction grid with all spatially varying covariates 
 ```{r lib}
 #| message: false
 
-pkgs <- c("tidyverse", "tidylog", "sp", "raster", "devtools", "RCurl", "sdmTMB", "terra", "ncdf4", "chron") 
+library(tidyverse)
+library(tidync)
+library(tidyterra)
+library(tidylog)
+library(sp)
+library(raster)
+library(devtools)
+library(RCurl)
+library(sdmTMB)
+library(terra)
+library(ncdf4)
+library(chron)
+library(viridis)
+library(readxl)
 
-if(length(setdiff(pkgs, rownames(installed.packages()))) > 0){
-
-    install.packages(setdiff(pkgs, rownames(installed.packages())), dependencies = T)
-  
-}
-
-invisible(lapply(pkgs, library, character.only = T))
+library(ggsidekick); theme_set(theme_sleek()) # devtools::install_github("seananderson/ggsidekick") # not on CRAN 
 
 # Source code for map plots
 devtools::source_url("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/R/functions/map-plot.R")
-
-# Packages not on CRAN
-# devtools::install_github("seananderson/ggsidekick") # not on CRAN 
-library(ggsidekick)
-theme_set(theme_sleek())
 
 # Set path
 home <- here::here()
@@ -48,15 +50,19 @@ home <- here::here()
 Read data and depth-raster
 
 ```{r depth}
+#| message: false
+
 # Read data
 d <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/spatial-metabolic-index/main/data/clean/catch_clean.csv") |> 
-  rename(X = x, Y = y)
+  rename(X = x, Y = y) 
 ```
 
 ## Make the grid with depth
 First make a grid for the biomass data, then subset that based on the extend of the stomach data
 
 ```{r make pred grid}
+#| message: false
+
 x <- d$X
 y <- d$Y
 z <- chull(x, y)
@@ -79,7 +85,7 @@ cell_width <- 3
 pred_grid <- expand.grid(
   X = seq(min(d$X), max(d$X), cell_width),
   Y = seq(min(d$Y), max(d$Y), cell_width),
-  year = c(1993:2021)
+  year = c(1993:2023)
   )
 
 ggplot(pred_grid |> filter(year == 2019), aes(X, Y)) +
@@ -119,7 +125,7 @@ ggplot(filter(pred_grid, year == 1999), aes(lon, lat)) + geom_point()
 # Add depth now to remove islands and remaining land
 # https://gis.stackexchange.com/questions/411261/read-multiple-layers-raster-from-ncdf-file-using-terra-package
 # https://emodnet.ec.europa.eu/geoviewer/
-dep_raster <- terra::rast(paste0(home, "/data/Mean depth natural colour (with land).nc"))
+dep_raster <- terra::rast(paste0(home, "/data/covariates/depth/Mean depth natural colour (with land).nc"))
 class(dep_raster)
 crs(dep_raster, proj = TRUE)
 
@@ -151,472 +157,35 @@ plot_map +
   geom_sf()
 ```
 
-### Substrate
-First add lat and lon based on X and Y (utm)
-
-```{r substrate}
-substrate <- terra::rast(paste0(home, "/data/substrate-tif/BALANCE_SEABED_SEDIMENT.tif"))
-
-newcrs <- "+proj=longlat +datum=WGS84"
-
-substrate_longlat = terra::project(substrate, newcrs)
- 
-plot(substrate_longlat)
-
-# Now extract the values from the saduria raster to pred_grid
-pred_grid$substrate <- terra::extract(substrate_longlat, pred_grid |> dplyr::select(lon, lat))$BALANCE_SEABED_SEDIMENT
-
-unique(pred_grid$substrate)
-
-factor(sort(unique(round(pred_grid$substrate))))
- 
-pred_grid$substrate <- round(pred_grid$substrate)
-
-pred_grid <- pred_grid %>% mutate(substrate = ifelse(substrate == 1, "bedrock", substrate),
-                                  substrate = ifelse(substrate == 2, "hard-bottom complex", substrate),
-                                  substrate = ifelse(substrate == 3, "sand", substrate),
-                                  substrate = ifelse(substrate == 4, "hard clay", substrate),
-                                  substrate = ifelse(substrate == 5, "mud", substrate))
-
-# I. Bedrock.
-# II. Hard bottom complex, includes patchy hard surfaces and coarse sand (sometimes also clay) to boulders.
-# III. Sand including fine to coarse sand (with gravel exposures).
-# IV. Hard clay sometimes/often/possibly exposed or covered with a thin layer of sand/gravel.
-# V. Mud including gyttja-clay to gyttja-silt.
-
-# Plot
-ggplot(pred_grid, aes(X, Y, fill = substrate)) +
-  geom_raster() +
-  coord_sf()
-```
-
 Add month_year variable for matching with raster layers
 
 ```{r merge quarters}
-pred_grid_1 <- pred_grid |> mutate(quarter = 1)
-pred_grid_4 <- pred_grid |> mutate(quarter = 4)
-
-dat <- bind_rows(pred_grid_1, pred_grid_4) |> 
-  mutate(month = ifelse(quarter == 1, 2, 11), # most common months
-         month_year = paste(month, year, sep = "_"))
-```
-
-## Oxygen
-
-```{r oxygen}
-# Downloaded from here: https://data.marine.copernicus.eu/products
-# Extract raster points: https://gisday.wordpress.com/2014/03/24/extract-raster-values-from-points-using-r/comment-page-1/
-# https://rpubs.com/boyerag/297592
-# https://pjbartlein.github.io/REarthSysSci/netCDF.html#get-a-variable
-# Open the netCDF file
-ncin <- nc_open(paste0(home, "/data/NEMO/cmems_mod_bal_bgc_my_P1M-m_1691065496556.nc"))
-
-print(ncin)
-
-# Get longitude and latitude
-lon <- ncvar_get(ncin,"lon")
-nlon <- dim(lon)
-head(lon)
-
-lat <- ncvar_get(ncin,"lat")
-nlat <- dim(lat)
-head(lat)
-
-# Get time
-time <- ncvar_get(ncin,"time")
-time
-
-tunits <- ncatt_get(ncin,"time","units")
-nt <- dim(time)
-nt
-tunits
-
-# Get oxygen
-dname <- "o2b"
-
-oxy_array <- ncvar_get(ncin,dname)
-dlname <- ncatt_get(ncin,dname,"long_name")
-dunits <- ncatt_get(ncin,dname,"units")
-fillvalue <- ncatt_get(ncin,dname,"_FillValue")
-dim(oxy_array)
-
-# Get global attributes
-title <- ncatt_get(ncin,0,"title")
-institution <- ncatt_get(ncin,0,"institution")
-datasource <- ncatt_get(ncin,0,"source")
-references <- ncatt_get(ncin,0,"references")
-history <- ncatt_get(ncin,0,"history")
-Conventions <- ncatt_get(ncin,0,"Conventions")
-
-# Convert time: split the time units string into fields
-tustr <- strsplit(tunits$value, " ")
-tdstr <- strsplit(unlist(tustr)[3], "-")
-tmonth <- as.integer(unlist(tdstr)[2])
-tday <- as.integer(unlist(tdstr)[3])
-tyear <- as.integer(unlist(tdstr)[1])
-
-# Here I deviate from the guide a little bit. Save this info:
-dates <- chron(time, origin = c(tmonth, tday, tyear))
-
-# Crop the date variable
-months <- as.numeric(substr(dates, 2, 3))
-years <- as.numeric(substr(dates, 8, 9))
-years <- ifelse(years > 90, 1900 + years, 2000 + years)
-
-# Replace netCDF fill values with NA's
-oxy_array[oxy_array == fillvalue$value] <- NA
-
-dim(oxy_array)
-str(dim(oxy_array))
-# The third slot is the date index
-
-# Loop through all "dates", put into a list 
-dlist <- list()
-
-for(i in 1:length(months)) {
-  
-  oxy_sub <- oxy_array[, , i]
-    
-  dlist[[i]] <- oxy_sub
-  
-}
-
-# Name the list
-names(dlist) <- paste(months, years, sep = "_")
-str(dlist)
-
-# Create data holding object
-oxy_data_list <- list()
-
-# Loop through each month_year and extract raster values for the cpue data points
-for(i in unique(dat$month_year)) { # We can use q1 as looping index, doesn't matter!
-  
-  # Set plot limits
-  ymin = 54; ymax = 58; xmin = 12; xmax = 22
-
-  # Subset a month-year combination
-  oxy_slice <- dlist[[i]]
-  
-  # Create raster for that year (i)
-  r <- raster(t(oxy_slice), xmn = min(lon), xmx = max(lon), ymn = min(lat), ymx = max(lat),
-              crs = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
-  
-  # Flip...
-  r <- flip(r, direction = 'y')
-  
-  plot(r, main = paste(i), ylim = c(ymin, ymax), xlim = c(xmin, xmax))
-
-  # Filter the same year (i) in the cpue data and select only coordinates
-  d_slice <- dat %>% filter(month_year == i) %>% dplyr::select(lon, lat)
-  
-  # Make into a SpatialPoints object
-  data_sp <- SpatialPoints(d_slice)
-  
-  # Extract raster value (oxygen)
-  rasValue <- raster::extract(r, data_sp)
-  
-  # Now we want to plot the results of the raster extractions by plotting the cpue data points over a raster and saving it for each year.
-  # Make the SpatialPoints object into a raster again (for plot)
-  df <- as.data.frame(data_sp)
-  
-  # Add in the raster value in the df holding the coordinates for the cpue data
-  d_slice$oxy <- rasValue
-  
-  # Add in which year
-  d_slice$month_year <- i
-
-  # Now the unit of oxygen is mmol/m3. I want it to be ml/L. The original model is in unit ml/L
-  # and it's been converted by the data host. Since it was converted without accounting for
-  # pressure or temperature, I can simply use the following conversion factor:
-  # 1 ml/l = 103/22.391 = 44.661 μmol/l -> 1 ml/l = 0.044661 mmol/l = 44.661 mmol/m^3 -> 0.0223909 ml/l = 1mmol/m^3
-  # https://ocean.ices.dk/tools/unitconversion.aspx
-
-  d_slice$oxy <- d_slice$oxy * 0.0223909
-    
-  # Add each years' data in the list
-  oxy_data_list[[i]] <- d_slice
-
-}
-
-# Now create a data frame from the list of all annual values
-big_dat_oxy <- dplyr::bind_rows(oxy_data_list)
-```
-
-#### Temperature
-
-```{r temperature}
-# Open the netCDF file
-ncin <- nc_open(paste0(home, "/data/NEMO/cmems_mod_bal_phy_my_P1M-m_1691065935335.nc"))
-                                        
-print(ncin)
-
-# Get longitude and latitude
-lon <- ncvar_get(ncin,"lon")
-nlon <- dim(lon)
-head(lon)
-
-lat <- ncvar_get(ncin,"lat")
-nlat <- dim(lat)
-head(lat)
-
-# Get time
-time <- ncvar_get(ncin,"time")
-time
-
-tunits <- ncatt_get(ncin,"time","units")
-nt <- dim(time)
-nt
-tunits
-
-# Get temperature
-dname <- "bottomT"
-
-temp_array <- ncvar_get(ncin,dname)
-dlname <- ncatt_get(ncin,dname,"long_name")
-dunits <- ncatt_get(ncin,dname,"units")
-fillvalue <- ncatt_get(ncin,dname,"_FillValue")
-dim(temp_array)
-
-# Get global attributes
-title <- ncatt_get(ncin,0,"title")
-institution <- ncatt_get(ncin,0,"institution")
-datasource <- ncatt_get(ncin,0,"source")
-references <- ncatt_get(ncin,0,"references")
-history <- ncatt_get(ncin,0,"history")
-Conventions <- ncatt_get(ncin,0,"Conventions")
-
-# Convert time: split the time units string into fields
-tustr <- strsplit(tunits$value, " ")
-tdstr <- strsplit(unlist(tustr)[3], "-")
-tmonth <- as.integer(unlist(tdstr)[2])
-tday <- as.integer(unlist(tdstr)[3])
-tyear <- as.integer(unlist(tdstr)[1])
-
-# Here I deviate from the guide a little bit. Save this info:
-dates <- chron(time, origin = c(tmonth, tday, tyear))
-
-# Crop the date variable
-months <- as.numeric(substr(dates, 2, 3))
-years <- as.numeric(substr(dates, 8, 9))
-years <- ifelse(years > 90, 1900 + years, 2000 + years)
-
-# Replace netCDF fill values with NA's
-temp_array[temp_array == fillvalue$value] <- NA
-
-# Loop through all "dates", put into a list 
-dlist <- list()
-
-for(i in 1:length(months)) {
-  
-  temp_sub <- temp_array[, , i]
-  
-  dlist[[i]] <- temp_sub
-  
-}
-
-# Name the list
-names(dlist) <- paste(months, years, sep = "_")
-str(dlist)
-
-# Create data holding object
-temp_data_list <- list()
-
-# Loop through each month_year and extract raster values for the cpue data points
-for(i in unique(dat$month_year)) { # We can use q1 as looping index, doesn't matter!
-  
-  # Set plot limits
-  ymin = 54; ymax = 58; xmin = 12; xmax = 22
-  
-  # Subset a month-year combination
-  temp_slice <- dlist[[i]]
-  
-  # Create raster for that year (i)
-  r <- raster(t(temp_slice), xmn = min(lon), xmx = max(lon), ymn = min(lat), ymx = max(lat),
-              crs = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
-  
-  # Flip...
-  r <- flip(r, direction = 'y')
-  
-  plot(r, main = paste(i), ylim = c(ymin, ymax), xlim = c(xmin, xmax))
-  
-  # Filter the same year (i) in the cpue data and select only coordinates
-  d_slice <- dat %>% filter(month_year == i) %>% dplyr::select(lon, lat)
-  
-  # Make into a SpatialPoints object
-  data_sp <- SpatialPoints(d_slice)
-  
-  # Extract raster value (oxygen)
-  rasValue <- raster::extract(r, data_sp)
-  
-  # Now we want to plot the results of the raster extractions by plotting the cpue data points over a raster and saving it for each year.
-  # Make the SpatialPoints object into a raster again (for plot)
-  df <- as.data.frame(data_sp)
-  
-  # Add in the raster value in the df holding the coordinates for the cpue data
-  d_slice$temp <- rasValue
-  
-  # Add in which year
-  d_slice$month_year <- i
-  
-  # Add each years' data in the list
-  temp_data_list[[i]] <- d_slice
-  
-}
-
-# Now create a data frame from the list of all annual values
-big_dat_temp <- dplyr::bind_rows(temp_data_list)
-```
-
-#### Salinity
-
-```{r salinity}
-# Open the netCDF file
-ncin <- nc_open(paste0(home, "/data/NEMO/cmems_mod_bal_phy_my_P1M-m_1691065974147.nc"))
-
-print(ncin)
-
-# Get longitude and latitude
-lon <- ncvar_get(ncin,"lon")
-nlon <- dim(lon)
-head(lon)
-
-lat <- ncvar_get(ncin,"lat")
-nlat <- dim(lat)
-head(lat)
-
-# Get time
-time <- ncvar_get(ncin,"time")
-time
-
-tunits <- ncatt_get(ncin,"time","units")
-nt <- dim(time)
-nt
-tunits
-
-# Get Salinity
-dname <- "sob"
-
-sal_array <- ncvar_get(ncin,dname)
-dlname <- ncatt_get(ncin,dname,"long_name")
-dunits <- ncatt_get(ncin,dname,"units")
-fillvalue <- ncatt_get(ncin,dname,"_FillValue")
-dim(sal_array)
-
-# Get global attributes
-title <- ncatt_get(ncin,0,"title")
-institution <- ncatt_get(ncin,0,"institution")
-datasource <- ncatt_get(ncin,0,"source")
-references <- ncatt_get(ncin,0,"references")
-history <- ncatt_get(ncin,0,"history")
-Conventions <- ncatt_get(ncin,0,"Conventions")
-
-# Convert time: split the time units string into fields
-tustr <- strsplit(tunits$value, " ")
-tdstr <- strsplit(unlist(tustr)[3], "-")
-tmonth <- as.integer(unlist(tdstr)[2])
-tday <- as.integer(unlist(tdstr)[3])
-tyear <- as.integer(unlist(tdstr)[1])
-
-# Here I deviate from the guide a little bit. Save this info:
-dates <- chron(time, origin = c(tmonth, tday, tyear))
-
-# Crop the date variable
-months <- as.numeric(substr(dates, 2, 3))
-years <- as.numeric(substr(dates, 8, 9))
-years <- ifelse(years > 90, 1900 + years, 2000 + years)
-
-# Replace netCDF fill values with NA's
-sal_array[sal_array == fillvalue$value] <- NA
-
-# Loop through all "dates", put into a list 
-dlist <- list()
-
-for(i in 1:length(months)) {
-  
-  sal_sub <- sal_array[, , i]
-  
-  dlist[[i]] <- sal_sub
-  
-}
-
-# Name the list
-names(dlist) <- paste(months, years, sep = "_")
-str(dlist)
-
-# Create data holding object
-sal_data_list <- list()
-
-# Loop through each month_year and extract raster values for the cpue data points
-for(i in unique(dat$month_year)) { # We can use q1 as looping index, doesn't matter!
-  
-  # Set plot limits
-  ymin = 54; ymax = 58; xmin = 12; xmax = 22
-  
-  # Subset a month-year combination
-  sal_slice <- dlist[[i]]
-  
-  # Create raster for that year (i)
-  r <- raster(t(sal_slice), xmn = min(lon), xmx = max(lon), ymn = min(lat), ymx = max(lat),
-              crs = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
-  
-  # Flip...
-  r <- flip(r, direction = 'y')
-  
-  plot(r, main = paste(i), ylim = c(ymin, ymax), xlim = c(xmin, xmax))
-  
-  # Filter the same year (i) in the cpue data and select only coordinates
-  d_slice <- dat %>% filter(month_year == i) %>% dplyr::select(lon, lat)
-  
-  # Make into a SpatialPoints object
-  data_sp <- SpatialPoints(d_slice)
-  
-  # Extract raster value (oxygen)
-  rasValue <- raster::extract(r, data_sp)
-  
-  # Now we want to plot the results of the raster extractions by plotting the cpue data points over a raster and saving it for each year.
-  # Make the SpatialPoints object into a raster again (for plot)
-  df <- as.data.frame(data_sp)
-  
-  # Add in the raster value in the df holding the coordinates for the cpue data
-  d_slice$sal <- rasValue
-  
-  # Add in which year
-  d_slice$month_year <- i
-  
-  # Add each years' data in the list
-  sal_data_list[[i]] <- d_slice
-  
-}
-
-# Now create a data frame from the list of all annual values
-big_dat_sal <- dplyr::bind_rows(sal_data_list)
-```
-
-```{r merge oxygen temp and salinity data with fish data}
-env_dat <- left_join(big_dat_oxy, big_dat_temp, by = c("month_year", "lon", "lat")) |> 
-  left_join(big_dat_sal, by = c("month_year", "lon", "lat"))
-
-# Now join these data with the full_dat
-dat_full <- left_join(dat, env_dat, by = c("month_year", "lon", "lat"))
+#| message: false
+
+dat <- replicate_df(pred_grid, "quarter", c(1, 4)) |> 
+   mutate(month = ifelse(quarter == 1, 2, 11), # most common months
+          month_year = paste(month, year, sep = "_"))
 ```
 
 ## Add ICES areas
 
 ```{r ices areas}
+#| message: false
+
 # https://stackoverflow.com/questions/34272309/extract-shapefile-value-to-point-with-r
 # https://gis.ices.dk/sf/
-shape <- shapefile(paste0(home, "/data/ICES-StatRec-mapto-ICES-Areas/StatRec_map_Areas_Full_20170124.shp"))
+shape <- shapefile(paste0(home, "/data/shapefiles/ICES-StatRec-mapto-ICES-Areas/StatRec_map_Areas_Full_20170124.shp"))
 head(shape)
 
-pts <- SpatialPoints(cbind(dat_full$lon, dat_full$lat), 
+pts <- SpatialPoints(cbind(dat$lon, dat$lat), 
                      proj4string = CRS(proj4string(shape)))
 
-dat_full$subdiv <- over(pts, shape)$Area_27
+dat$subdiv <- over(pts, shape)$Area_27
 
 # Rename subdivisions to the more common names and do some more filtering (by sub div and area)
-sort(unique(dat_full$subdiv))
+sort(unique(dat$subdiv))
 
-dat_full <- dat_full |> 
+dat <- dat |> 
   mutate(sub_div = factor(subdiv),
          sub_div = fct_recode(subdiv,
                               "24" = "3.d.24",
@@ -631,22 +200,249 @@ dat_full <- dat_full |>
   filter(lat > 54 & lat < 59 & lon < 22)
 
 # Add ICES rectangles
-dat_full$ices_rect <- mapplots::ices.rect2(lon = dat_full$lon, lat = dat_full$lat)
+dat$ices_rect <- mapplots::ices.rect2(lon = dat$lon, lat = dat$lat)
 
-plot_map +
-  geom_raster(data = filter(dat_full, year == 1999), aes(X*1000, Y*1000, fill = oxy)) +
-  facet_wrap(~sub_div)
+dat <- dat |> dplyr::select(-subdiv)
+```
 
-dat_full <- dat_full |> dplyr::select(-subdiv)
+## Add Saduria
+
+```{r saduria}
+saduria <- terra::rast(paste0(home, "/data/covariates/saduria/FWBiomassm_raster_19812019presHighweightcor_no0_newZi.tif"))
+
+WGS84 <- "+proj=longlat +datum=WGS84"
+
+saduria_latlon <- terra::project(saduria, WGS84)
+
+density_saduria <- terra::extract(saduria_latlon, dat |> dplyr::select(lon, lat))
+
+dat$saduria <- density_saduria$FWBiomassm_raster_19812019presHighweightcor_no0_newZi
+```
+
+## Add pelagic
+
+```{r}
+#| message: false
+
+# Read data on rectangle level
+spr <- read_xlsx(paste0(home, "/data/covariates/pelagic/N and B per Rect. 1991-2023.xlsx"),
+                 sheet = 4) |>
+  rename(ices_rect = RECT,
+         year = ANNUS) |>
+  mutate_at(vars(`1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`), ~replace_na(., 0)) |> # I need to replace NA with 0, else I can't sum! According to Olavi who sent the data, NA means 0 and nothing else. Rectangle*year combinations that do not have information about biomass are simply not included in this data
+  mutate(ices_rect = as.factor(ices_rect),
+         Species = "Sprat",
+         biomass_spr = `1`+`2`+`3`+`4`+`5`+`6`+`7`+`8`, 
+         id_r = paste(ices_rect, year, sep = "_")) |> 
+  filter(year >= 1993) |> 
+  dplyr::select(year, ices_rect, biomass_spr) |> 
+  summarise(biomass_spr = mean(biomass_spr), .by = c(ices_rect, year))
+
+her <- read_xlsx(paste0(home, "/data/covariates/pelagic/N and B per Rect. 1991-2023.xlsx"),
+                 sheet = 3) |>
+  rename(ices_rect = RECT,
+         year = ANNUS) |>
+  mutate_at(vars(`1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`), ~replace_na(., 0)) |> # I need to replace NA with 0, else I can't sum! According to Olavi who sent the data, NA means 0 and nothing else. Rectangle*year combinations that do not have information about biomass are simply not included in this data
+  mutate(ices_rect = as.factor(ices_rect),
+         Species = "Sprat",
+         biomass_her = `1`+`2`+`3`+`4`+`5`+`6`+`7`+`8`, 
+         id_r = paste(ices_rect, year, sep = "_")) |> 
+  filter(year >= 1993) |> 
+  dplyr::select(year, ices_rect, biomass_her) |> 
+  summarise(biomass_her = mean(biomass_her), .by = c(ices_rect, year))
+
+pelagics <- left_join(spr, her, by = c("year", "ices_rect"))
+
+dat <- dat |> tidylog::left_join(pelagics, by = c("year", "ices_rect"))
+
+# If there are no data in a specific rectangle, use the sub-division mean. If no values in the sub div, use annual mean
+dat <- dat |> 
+  mutate(biomass_spr_sd_mean = mean(biomass_spr, na.rm = TRUE),
+         biomass_her_sd_mean = mean(biomass_her, na.rm = TRUE),
+         .by = c(sub_div, year)) |> 
+  mutate(biomass_spr = ifelse(is.na(biomass_spr), biomass_spr_sd_mean, biomass_spr),
+         biomass_her = ifelse(is.na(biomass_her), biomass_her_sd_mean, biomass_her)) |> 
+  mutate(biomass_spr_yr_mean = mean(biomass_spr, na.rm = TRUE),
+         biomass_her_yr_mean = mean(biomass_her, na.rm = TRUE),
+         .by = c(year)) |> 
+  mutate(biomass_spr = ifelse(is.na(biomass_spr), biomass_spr_yr_mean, biomass_spr),
+         biomass_her = ifelse(is.na(biomass_her), biomass_her_yr_mean, biomass_her))
+```
+
+## Add environmental covariates
+
+#### Oxygen
+
+```{r oxygen}
+#| message: false
+
+covPath <- paste0(home, "/data/covariates")
+
+# Source: 
+# https://data.marine.copernicus.eu/product/BALTICSEA_ANALYSISFORECAST_BGC_003_007/download?dataset=cmems_mod_bal_bgc_anfc_P1M-m_202311
+# https://data.marine.copernicus.eu/product/BALTICSEA_MULTIYEAR_BGC_003_012/download?dataset=cmems_mod_bal_bgc_my_P1M-m_202303
+# Print details
+print(nc_open(paste(covPath, "oxygen", "cmems_mod_bal_bgc_my_P1M-m_1718018848983.nc", sep = "/")))
+
+oxy_tibble <- tidync(paste(covPath, "oxygen",
+                           "cmems_mod_bal_bgc_my_P1M-m_1718018848983.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_"),
+         oxy = o2b * 0.0223909)
+
+# Now do recent data (forecast)
+print(nc_open(paste(covPath, "oxygen", "cmems_mod_bal_bgc_anfc_P1M-m_1718022118172.nc", sep = "/")))
+
+oxy_tibble_new <- tidync(paste(covPath, "oxygen",
+                            "cmems_mod_bal_bgc_anfc_P1M-m_1718022118172.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_"),
+         oxy = o2b * 0.0223909) |> 
+  filter(year > 2021)
+
+oxy_tibble <- bind_rows(oxy_tibble, oxy_tibble_new)
+
+# Loop through all year combos, extract the temperatures at the data locations
+oxy_list <- list()
+
+for(i in unique(dat$month_year)) {
+  
+  d_sub <- filter(dat, month_year == i)
+  oxy_tibble_sub <- filter(oxy_tibble, month_year == i)
+  
+  # Convert to raster
+  ggplot(oxy_tibble_sub, aes(longitude, latitude)) + 
+    geom_point(size = 0.1)
+  
+  oxy_raster <- as_spatraster(oxy_tibble_sub, xycols = 2:3,
+                              crs = "WGS84", digits = 3)
+
+  ggplot() +
+    geom_spatraster(data = oxy_raster$oxy, aes(fill = oxy)) + 
+    scale_fill_viridis(option = "magma") +
+    ggtitle(i)
+
+  # Extract from raster
+  d_sub$oxy <- terra::extract(oxy_raster$oxy,
+                              d_sub |> dplyr::select(lon, lat))$oxy  
+   
+  # Save
+  oxy_list[[i]] <- d_sub
+  
+}
+
+d_oxy <- bind_rows(oxy_list)
+```
+
+#### Temperature & Salinity
+
+```{r temperature}
+#| message: false
+
+# Source
+# https://data.marine.copernicus.eu/product/BALTICSEA_MULTIYEAR_PHY_003_011/description
+# https://data.marine.copernicus.eu/product/BALTICSEA_ANALYSISFORECAST_PHY_003_006/description
+# Print details
+print(nc_open(paste(covPath, "temperature_salinity", "cmems_mod_bal_phy_my_P1M-m_1718087629163.nc", sep = "/")))
+
+st_tibble <- tidync(paste(covPath, "temperature_salinity",
+                          "cmems_mod_bal_phy_my_P1M-m_1718087629163.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_"))
+
+# Now do recent data (forecast)
+print(nc_open(paste(covPath, "temperature_salinity", "cmems_mod_bal_phy_anfc_P1M-m_1718087127439.nc", sep = "/")))
+
+st_tibble_new <- tidync(paste(covPath, "temperature_salinity",
+                              "cmems_mod_bal_phy_anfc_P1M-m_1718087127439.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_")) |> 
+  filter(year > 2021)
+
+st_tibble <- bind_rows(st_tibble, st_tibble_new)
+
+# Loop through all year combos, extract the temperatures at the data locations
+st_list <- list()
+
+for(i in unique(dat$month_year)) {
+  
+  d_sub <- filter(dat, month_year == i)
+  st_tibble_sub <- filter(st_tibble, month_year == i)
+  
+  # Convert to raster
+  ggplot(st_tibble_sub, aes(longitude, latitude)) + 
+    geom_point(size = 0.1)
+  
+  st_raster <- as_spatraster(st_tibble_sub, xycols = 3:4,
+                             crs = "WGS84", digits = 3)
+
+  ggplot() +
+    geom_spatraster(data = st_raster$bottomT, aes(fill = bottomT)) + 
+    scale_fill_viridis(option = "magma") +
+    ggtitle(i)
+  
+  ggplot() +
+    geom_spatraster(data = st_raster$sob, aes(fill = sob)) + 
+    scale_fill_viridis(option = "magma") +
+    ggtitle(i)
+
+  # Extract from raster
+  d_sub$temp <- terra::extract(st_raster$bottomT,
+                               d_sub |> dplyr::select(lon, lat))$bottomT
+  
+  d_sub$salinity <- terra::extract(st_raster$sob,
+                                   d_sub |> dplyr::select(lon, lat))$sob  
+   
+  # Save
+  st_list[[i]] <- d_sub
+  
+}
+
+d_st <- bind_rows(st_list)
+```
+
+```{r join environmental data}
+#| message: false
+
+env_dat <- d_st |> 
+  left_join(d_oxy |> dplyr::select(-X, -Y, -depth, -quarter, -year, -month),
+            by = c("month_year", "lon", "lat")) |> 
+  dplyr::select(month_year, lon, lat, temp, salinity, oxy)
+```
+
+```{r merge oxygen temp and salinity data with fish data}
+#| message: false
+
+# Now join these data with the full_dat
+dat_full <- left_join(dat, env_dat, by = c("month_year", "lon", "lat")) |> 
+  drop_na(temp, salinity, oxy)
 ```
 
 ## Save
 
 ```{r save}
-# Remove variables and save
-pred_grid_93_06 <- dat_full |> filter(year < 2007)
-pred_grid_07_19 <- dat_full |> filter(year > 2006)
+#| message: false
 
-write_csv(pred_grid_93_06, file = paste0(home, "/data/clean/pred_grid_(1_2).csv"))
-write_csv(pred_grid_07_19, file = paste0(home, "/data/clean/pred_grid_(2_2).csv"))
+# Remove variables and save
+pred_grid_93_08 <- dat_full |> filter(year <= 2008)
+pred_grid_09_23 <- dat_full |> filter(year >= 2009)
+
+write_csv(pred_grid_93_08, file = paste0(home, "/data/clean/pred_grid_(1_2).csv"))
+write_csv(pred_grid_09_23, file = paste0(home, "/data/clean/pred_grid_(2_2).csv"))
 ```

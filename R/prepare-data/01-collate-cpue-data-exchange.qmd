@@ -27,45 +27,30 @@ In this script, I load exchange data from datras and calculate catch of cod and 
 #| message: false
 
 # Load libraries, install if needed
-pkgs <- c("tidyverse", "readxl", "tidylog", "RCurl", "devtools", "patchwork",
-          "janitor", "viridis", "RColorBrewer", "icesDatras", "mapdata", "rgdal",
-          "raster", "sf", "rgeos", "chron", "lattice", "ncdf4", "marmap", "rnaturalearth",
-          "rnaturalearthdata", "mapplots", "geosphere", "modelr") 
-
-if(length(setdiff(pkgs,rownames(installed.packages()))) > 0){
-
-    install.packages(setdiff(pkgs, rownames(installed.packages())), dependencies = T)
-  
-  }
-
-invisible(lapply(pkgs, library, character.only = T))
-
-# Packages not on CRAN or dec version
-# remotes::install_github("pbs-assess/sdmTMB", dependencies = TRUE)
-# devtools::install_github("seananderson/ggsidekick") # not on CRAN 
+library(tidyverse)
+library(readxl)
+library(RCurl)
+library(devtools)
+library(patchwork)
+library(janitor)
+library(viridis)
+library(icesDatras)
+library(mapdata)
+library(raster)
+library(ncdf4)
+library(marmap)
+library(modelr)
+library(tidync)
+library(tidyterra)
+library(tidylog)
 library(sdmTMB)
+# devtools::install_github("seananderson/ggsidekick") # not on CRAN 
 library(ggsidekick)
 theme_set(theme_sleek())
 
-world <- ne_countries(scale = "medium", returnclass = "sf")
-
-# function to plot proportion zero catches
-prop_zero <- function(.data){
-
-  .data |> 
-  mutate(zero_catch = ifelse(haul_cpue_kg == 0, "Y", "N")) |>
-  group_by(zero_catch) |> 
-  summarise(n = n()) |> 
-  mutate(per = prop.table(n) * 100)
-
-}
-
 # Source code for map plots
 source_url("https://raw.githubusercontent.com/maxlindmark/cod-interactions/main/R/functions/map-plot.R")
-
-# Source code for lon lat to utm
-source_url("https://raw.githubusercontent.com/maxlindmark/cod-interactions/main/R/functions/lon-lat-utm.R")
-
+ 
 # Set path
 home <- here::here()
 ```
@@ -75,25 +60,25 @@ home <- here::here()
 ```{r read data}
 #| message: false
 
-# Data were read in from getDATRAS on 2022.09.06
+# Data were read in from getDATRAS on 2024.06.10
 # Read HH data
-#bits_hh <- getDATRAS(record = "HH", survey = "BITS", years = 1991:2021, quarters = c(1, 4))
-#write.csv(bits_hh, "data/DATRAS-exchange/bits_hh.csv")
-bits_hh <- read_csv(paste0(home, "/data/DATRAS-exchange/bits_hh.csv")) |> filter(Year > 1992) # To match covariates
+#bits_hh <- getDATRAS(record = "HH", survey = "BITS", years = 1991:2023, quarters = c(1, 4))
+#write.csv(bits_hh, "data/DATRAS/bits_hh.csv")
+bits_hh <- read_csv(paste0(home, "/data/DATRAS/bits_hh.csv")) |> filter(Year > 1992) # To match covariates
 
 # Read HL data
-#bits_hl <- getDATRAS(record = "HL", survey = "BITS", years = 1991:2021, quarters = c(1, 4))
-#write.csv(bits_hl, "data/DATRAS-exchange/bits_hl.csv")
-bits_hl <- read_csv(paste0(home, "/data/DATRAS-exchange/bits_hl.csv")) |> filter(Year > 1992) # To match covariates
+#bits_hl <- getDATRAS(record = "HL", survey = "BITS", years = 1991:2023, quarters = c(1, 4))
+#write.csv(bits_hl, "data/DATRAS/bits_hl.csv")
+bits_hl <- read_csv(paste0(home, "/data/DATRAS/bits_hl.csv")) |> filter(Year > 1992) # To match covariates
 
 # Read CA data
-#bits_ca <- getDATRAS(record = "CA", survey = "BITS", years = 1991:2021, quarters = c(1, 4))
-#write.csv(bits_ca, "data/DATRAS-exchange/bits_ca.csv")
-bits_ca <- read_csv(paste0(home, "/data/DATRAS-exchange/bits_ca.csv")) |> filter(Year > 1992) # To match covariates
+#bits_ca <- getDATRAS(record = "CA", survey = "BITS", years = 1991:2023, quarters = c(1, 4))
+#write.csv(bits_ca, "data/DATRAS/bits_ca.csv")
+bits_ca <- read_csv(paste0(home, "/data/DATRAS/bits_ca.csv")) |> filter(Year > 1992) # To match covariates
 
 # Read gear standardization data 
-sweep <- read.csv(paste0(home, "/data/from-ale/sweep_9116.csv"), sep = ";", dec = ",", fileEncoding = "latin1")
-sweep <- read.csv(paste0(home, "/data/from-ale/sweep_9118_ml.csv"), sep = ";", fileEncoding = "latin1")
+sweep <- read.csv(paste0(home, "/data/cpue-standardization/sweep_9116.csv"), sep = ";", dec = ",", fileEncoding = "latin1")
+sweep <- read.csv(paste0(home, "/data/cpue-standardization/sweep_9118_ml.csv"), sep = ";", fileEncoding = "latin1")
 ```
 
 ## Standardize catch data
@@ -101,7 +86,7 @@ sweep <- read.csv(paste0(home, "/data/from-ale/sweep_9118_ml.csv"), sep = ";", f
 ```{r ships}
 #| message: false
 
-# Before creating a a new ID, make sure that countries and ships names use the same format
+# Before creating a new ID, make sure that countries and ships names use the same format
 sort(unique(sweep$Ship))
 sort(unique(bits_hh$Ship))
 sort(unique(bits_hl$Ship))
@@ -288,7 +273,7 @@ bits_hh <- bits_hh |>
 bits_hh$Rect <- mapplots::ices.rect2(lon = bits_hh$ShootLong, lat = bits_hh$ShootLat)
 
 # Add ICES subdivisions
-shape <- shapefile(paste0(home, "/data/ICES-StatRec-mapto-ICES-Areas/StatRec_map_Areas_Full_20170124.shp"))
+shape <- shapefile(paste0(home, "/data/shapefiles/ICES-StatRec-mapto-ICES-Areas/StatRec_map_Areas_Full_20170124.shp"))
 
 pts <- SpatialPoints(cbind(bits_hh$ShootLong, bits_hh$ShootLat), 
                      proj4string = CRS(proj4string(shape)))
@@ -388,6 +373,8 @@ bits_ca <- bits_ca |> filter(sub_div %in% c(24, 25, 26, 27, 28))
 ```
 
 ```{r test}
+#| include: false
+#| eval: false
 bits_hl |> filter(Year == 2016 & Quarter == 1 & Month == 2 & Country == "SWE" & Rect == "39G4") |> distinct(HaulNo)
 ```
 
@@ -525,17 +512,7 @@ bits_ca_cod <- bits_ca |>
   mutate(ID = paste(Year, Quarter, Country, Ship, Gear, StNo, HaulNo, sep = "."))
 
 # Now I need to copy rows with NoAtLngt > 1 so that 1 row = 1 ind
-# First make a small test
-# nrow(bits_ca_cod)
-# test_id <- head(filter(bits_ca_cod, CANoAtLngt == 5))$ID[1]
-# filter(bits_ca_cod, ID == test_id & CANoAtLngt == 5)
-
-# magritte pipe here to be able to use "."
 bits_ca_cod <- bits_ca_cod %>% map_df(., rep, .$CANoAtLngt)
-
-# head(data.frame(filter(bits_ca_cod, ID == test_id & CANoAtLngt == 5)), 20)
-# nrow(bits_ca_cod)
-# Looks ok!
 
 # Standardize length and drop NA weights (need that for condition)
 bits_ca_cod <- bits_ca_cod |> 
@@ -553,22 +530,22 @@ ggplot(bits_ca_cod, aes(IndWgt, length_cm)) +
   facet_wrap(~Year)
 
 # Now extract the coefficients for each year (not bothering with outliers at the moment)
-cod_intercept <- bits_ca_cod %>%
-  split(.$Year) %>%
-  purrr::map(~lm(log(IndWgt) ~ log(length_cm), data = .x)) %>%
-  purrr::map_df(broom::tidy, .id = 'Year') %>%
-  filter(term == "(Intercept)") %>% 
-  mutate(a = exp(estimate)) %>% 
-  mutate(Year = as.integer(Year)) %>% 
+cod_intercept <- bits_ca_cod |> 
+  split(~Year) |> 
+  purrr::map(~lm(log(IndWgt) ~ log(length_cm), data = .x)) |>
+  purrr::map_df(broom::tidy, .id = 'Year') |>
+  filter(term == "(Intercept)") |> 
+  mutate(a = exp(estimate)) |> 
+  mutate(Year = as.integer(Year)) |> 
   dplyr::select(Year, a)
 
-cod_slope <- bits_ca_cod %>%
-  split(.$Year) %>%
-  purrr::map(~lm(log(IndWgt) ~ log(length_cm), data = .x)) %>%
-  purrr::map_df(broom::tidy, .id = 'Year') %>%
-  filter(term == "log(length_cm)") %>% 
-  mutate(Year = as.integer(Year)) %>% 
-  rename("b" = "estimate") %>% 
+cod_slope <- bits_ca_cod |>
+  split(~Year) |>
+  purrr::map(~lm(log(IndWgt) ~ log(length_cm), data = .x)) |>
+  purrr::map_df(broom::tidy, .id = 'Year') |>
+  filter(term == "log(length_cm)") |> 
+  mutate(Year = as.integer(Year)) |> 
+  rename("b" = "estimate") |> 
   dplyr::select(Year, b)
 ```
 
@@ -731,9 +708,9 @@ sweep <- sweep |> mutate(Horizontal.opening..m.2 = Fishing.line*0.67,
                           Swept.area2 = (Size.final..m2*3*1860)/1000000,
                           RSA_x = 0.45388309675081/Swept.area2)
 
-sweep %>%
-  drop_na() %>%
-  ggplot(., aes(as.numeric(RSA), RSA_x)) + geom_point() + geom_abline(intercept = 0, slope = 1)
+sweep |>
+  drop_na() |>
+  ggplot(aes(as.numeric(RSA), RSA_x)) + geom_point() + geom_abline(intercept = 0, slope = 1)
 # Yes it's the same
 
 # Replace NAs with -1/3 (because ICES codes missing values as -9 and in the calculation above they get -1/3),
@@ -887,6 +864,8 @@ datcod <- hlcodhaul |>
 ```
 
 ```{r very long data with all combinations of size and haul id}
+#| message: false
+
 # Because it's size-based cpue, I want the data frame to be "full", so that each haul has every size, even if all are empty. Now I only have lengths with catches, and no lengths if catch is zero.
 datcod |> group_by(haul.id) |> summarise(n_size = length(unique(length_cm))) |> distinct(n_size, .keep_all = TRUE)
 datcod |> filter(haul.id == "1993:1:GFR:SOL:H20:23:31") |> as.data.frame()
@@ -983,436 +962,190 @@ ggplot(bind_rows(codq1, codq4), aes(year, prop_z*100, color = factor(q))) +
 ## Add in the environmental variables
 
 ```{r add env vars}
+#| message: false
+
 # Only need 1 row per haul
-dat <- dat %>%
+dat <- dat |>
   mutate(month_year = paste(month, year, sep = "_"))
   
-dat_haul <- dat %>%
+dat_haul <- dat |>
   distinct(haul.id, .keep_all = TRUE) |>
-  dplyr::select(lat, lon, year, month, quarter, month_year)
+  dplyr::select(lat, lon, year, month, month_year)
+
+covPath <- paste0(home, "/data/covariates")
 ```
 
 #### Oxygen
 
 ```{r oxygen}
-# Downloaded from here: https://data.marine.copernicus.eu/products
-# Extract raster points: https://gisday.wordpress.com/2014/03/24/extract-raster-values-from-points-using-r/comment-page-1/
-# https://rpubs.com/boyerag/297592
-# https://pjbartlein.github.io/REarthSysSci/netCDF.html#get-a-variable
-# Open the netCDF file
-ncin <- nc_open(paste0(home, "/data/NEMO/cmems_mod_bal_bgc_my_P1M-m_1691065496556.nc"))
+#| message: false
 
-print(ncin)
+# Source: 
+# https://data.marine.copernicus.eu/product/BALTICSEA_ANALYSISFORECAST_BGC_003_007/download?dataset=cmems_mod_bal_bgc_anfc_P1M-m_202311
+# https://data.marine.copernicus.eu/product/BALTICSEA_MULTIYEAR_BGC_003_012/download?dataset=cmems_mod_bal_bgc_my_P1M-m_202303
+# Print details
+print(nc_open(paste(covPath, "oxygen", "cmems_mod_bal_bgc_my_P1M-m_1718018848983.nc", sep = "/")))
 
-# Get longitude and latitude
-lon <- ncvar_get(ncin,"lon")
-nlon <- dim(lon)
-head(lon)
+oxy_tibble <- tidync(paste(covPath, "oxygen",
+                           "cmems_mod_bal_bgc_my_P1M-m_1718018848983.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_"),
+         oxy = o2b * 0.0223909)
 
-lat <- ncvar_get(ncin,"lat")
-nlat <- dim(lat)
-head(lat)
+# Now do recent data (forecast)
+print(nc_open(paste(covPath, "oxygen", "cmems_mod_bal_bgc_anfc_P1M-m_1718022118172.nc", sep = "/")))
 
-# Get time
-time <- ncvar_get(ncin,"time")
-time
+oxy_tibble_new <- tidync(paste(covPath, "oxygen",
+                            "cmems_mod_bal_bgc_anfc_P1M-m_1718022118172.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_"),
+         oxy = o2b * 0.0223909) |> 
+  filter(year > 2021)
 
-tunits <- ncatt_get(ncin,"time","units")
-nt <- dim(time)
-nt
-tunits
+oxy_tibble <- bind_rows(oxy_tibble, oxy_tibble_new)
 
-# Get oxygen
-dname <- "o2b"
+# Loop through all year combos, extract the temperatures at the data locations
+oxy_list <- list()
 
-oxy_array <- ncvar_get(ncin,dname)
-dlname <- ncatt_get(ncin,dname,"long_name")
-dunits <- ncatt_get(ncin,dname,"units")
-fillvalue <- ncatt_get(ncin,dname,"_FillValue")
-dim(oxy_array)
-
-# Get global attributes
-title <- ncatt_get(ncin,0,"title")
-institution <- ncatt_get(ncin,0,"institution")
-datasource <- ncatt_get(ncin,0,"source")
-references <- ncatt_get(ncin,0,"references")
-history <- ncatt_get(ncin,0,"history")
-Conventions <- ncatt_get(ncin,0,"Conventions")
-
-# Convert time: split the time units string into fields
-tustr <- strsplit(tunits$value, " ")
-tdstr <- strsplit(unlist(tustr)[3], "-")
-tmonth <- as.integer(unlist(tdstr)[2])
-tday <- as.integer(unlist(tdstr)[3])
-tyear <- as.integer(unlist(tdstr)[1])
-
-# Here I deviate from the guide a little bit. Save this info:
-dates <- chron(time, origin = c(tmonth, tday, tyear))
-
-# Crop the date variable
-months <- as.numeric(substr(dates, 2, 3))
-years <- as.numeric(substr(dates, 8, 9))
-years <- ifelse(years > 90, 1900 + years, 2000 + years)
-
-# Replace netCDF fill values with NA's
-oxy_array[oxy_array == fillvalue$value] <- NA
-
-dim(oxy_array)
-str(dim(oxy_array))
-# The third slot is the date index
-
-# Loop through all "dates", put into a list 
-dlist <- list()
-
-for(i in 1:length(months)) {
+for(i in unique(dat_haul$month_year)) {
   
-  oxy_sub <- oxy_array[, , i]
-    
-  dlist[[i]] <- oxy_sub
+  d_sub <- filter(dat_haul, month_year == i)
+  oxy_tibble_sub <- filter(oxy_tibble, month_year == i)
+  
+  # Convert to raster
+  ggplot(oxy_tibble_sub, aes(longitude, latitude)) + 
+    geom_point(size = 0.1)
+  
+  oxy_raster <- as_spatraster(oxy_tibble_sub, xycols = 2:3,
+                              crs = "WGS84", digits = 3)
+
+  ggplot() +
+    geom_spatraster(data = oxy_raster$oxy, aes(fill = oxy)) + 
+    scale_fill_viridis(option = "magma") +
+    ggtitle(i)
+
+  # Extract from raster
+  d_sub$oxy <- terra::extract(oxy_raster$oxy,
+                              d_sub |> dplyr::select(lon, lat))$oxy  
+   
+  # Save
+  oxy_list[[i]] <- d_sub
   
 }
 
-# Name the list
-names(dlist) <- paste(months, years, sep = "_")
-str(dlist)
-
-# Create data holding object
-oxy_data_list <- list()
-
-# This is our looping index: 
-# unique(dat_haul$month_year)
-# We do not have January 1993 in the oxygen raster. Replace that with february
-dat_haul_month_year <- unique(dat_haul$month_year)
-dat_haul_month_year[3] <- "2_1993"
-
-# Loop through each month_year and extract raster values for the cpue data points
-for(i in dat_haul_month_year) {
-  
-  # Set plot limits
-  ymin = 54; ymax = 58; xmin = 12; xmax = 22
-
-  # Subset a month-year combination
-  oxy_slice <- dlist[[i]]
-  
-  # Create raster for that year (i)
-  r <- raster(t(oxy_slice), xmn = min(lon), xmx = max(lon), ymn = min(lat), ymx = max(lat),
-              crs = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
-  
-  # Flip...
-  r <- flip(r, direction = 'y')
-  
-  plot(r, main = paste(i), ylim = c(ymin, ymax), xlim = c(xmin, xmax))
-
-  # Filter the same year (i) in the cpue data and select only coordinates
-  d_slice <- dat_haul %>% filter(month_year == i) %>% dplyr::select(lon, lat)
-  
-  # Make into a SpatialPoints object
-  data_sp <- SpatialPoints(d_slice)
-  
-  # Extract raster value (oxygen)
-  rasValue <- raster::extract(r, data_sp)
-  
-  # Now we want to plot the results of the raster extractions by plotting the cpue data points over a raster and saving it for each year.
-  # Make the SpatialPoints object into a raster again (for plot)
-  df <- as.data.frame(data_sp)
-  
-  # Add in the raster value in the df holding the coordinates for the cpue data
-  d_slice$oxy <- rasValue
-  
-  # Add in which year
-  d_slice$month_year <- i
-
-  # Now the unit of oxygen is mmol/m3. I want it to be ml/L. The original model is in unit ml/L
-  # and it's been converted by the data host. Since it was converted without accounting for
-  # pressure or temperature, I can simply use the following conversion factor:
-  # 1 ml/l = 103/22.391 = 44.661 μmol/l -> 1 ml/l = 0.044661 mmol/l = 44.661 mmol/m^3 -> 0.0223909 ml/l = 1mmol/m^3
-  # https://ocean.ices.dk/tools/unitconversion.aspx
-
-  d_slice$oxy <- d_slice$oxy * 0.0223909
-    
-  # Add each years' data in the list
-  oxy_data_list[[i]] <- d_slice
-
-}
-
-# Now create a data frame from the list of all annual values
-big_dat_oxy <- dplyr::bind_rows(oxy_data_list)
+d_oxy <- bind_rows(oxy_list)
 ```
 
-#### Temperature
+#### Temperature & Salinity
 
 ```{r temperature}
-# Open the netCDF file
-ncin <- nc_open(paste0(home, "/data/NEMO/cmems_mod_bal_phy_my_P1M-m_1691065935335.nc"))
-                                        
-print(ncin)
+#| message: false
 
-# Get longitude and latitude
-lon <- ncvar_get(ncin,"lon")
-nlon <- dim(lon)
-head(lon)
+# Source
+# https://data.marine.copernicus.eu/product/BALTICSEA_MULTIYEAR_PHY_003_011/description
+# https://data.marine.copernicus.eu/product/BALTICSEA_ANALYSISFORECAST_PHY_003_006/description
+# Print details
+print(nc_open(paste(covPath, "temperature_salinity", "cmems_mod_bal_phy_my_P1M-m_1718087629163.nc", sep = "/")))
 
-lat <- ncvar_get(ncin,"lat")
-nlat <- dim(lat)
-head(lat)
+st_tibble <- tidync(paste(covPath, "temperature_salinity",
+                          "cmems_mod_bal_phy_my_P1M-m_1718087629163.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_"))
 
-# Get time
-time <- ncvar_get(ncin,"time")
-time
+# Now do recent data (forecast)
+print(nc_open(paste(covPath, "temperature_salinity", "cmems_mod_bal_phy_anfc_P1M-m_1718087127439.nc", sep = "/")))
 
-tunits <- ncatt_get(ncin,"time","units")
-nt <- dim(time)
-nt
-tunits
+st_tibble_new <- tidync(paste(covPath, "temperature_salinity",
+                              "cmems_mod_bal_phy_anfc_P1M-m_1718087127439.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_")) |> 
+  filter(year > 2021)
 
-# Get temperature
-dname <- "bottomT"
+st_tibble <- bind_rows(st_tibble, st_tibble_new)
 
-temp_array <- ncvar_get(ncin,dname)
-dlname <- ncatt_get(ncin,dname,"long_name")
-dunits <- ncatt_get(ncin,dname,"units")
-fillvalue <- ncatt_get(ncin,dname,"_FillValue")
-dim(temp_array)
+# Loop through all year combos, extract the temperatures at the data locations
+st_list <- list()
 
-# Get global attributes
-title <- ncatt_get(ncin,0,"title")
-institution <- ncatt_get(ncin,0,"institution")
-datasource <- ncatt_get(ncin,0,"source")
-references <- ncatt_get(ncin,0,"references")
-history <- ncatt_get(ncin,0,"history")
-Conventions <- ncatt_get(ncin,0,"Conventions")
-
-# Convert time: split the time units string into fields
-tustr <- strsplit(tunits$value, " ")
-tdstr <- strsplit(unlist(tustr)[3], "-")
-tmonth <- as.integer(unlist(tdstr)[2])
-tday <- as.integer(unlist(tdstr)[3])
-tyear <- as.integer(unlist(tdstr)[1])
-
-# Here I deviate from the guide a little bit. Save this info:
-dates <- chron(time, origin = c(tmonth, tday, tyear))
-
-# Crop the date variable
-months <- as.numeric(substr(dates, 2, 3))
-years <- as.numeric(substr(dates, 8, 9))
-years <- ifelse(years > 90, 1900 + years, 2000 + years)
-
-# Replace netCDF fill values with NA's
-temp_array[temp_array == fillvalue$value] <- NA
-
-# Loop through all "dates", put into a list 
-dlist <- list()
-
-for(i in 1:length(months)) {
+for(i in unique(dat_haul$month_year)) {
   
-  temp_sub <- temp_array[, , i]
+  d_sub <- filter(dat_haul, month_year == i)
+  st_tibble_sub <- filter(st_tibble, month_year == i)
   
-  dlist[[i]] <- temp_sub
+  # Convert to raster
+  ggplot(st_tibble_sub, aes(longitude, latitude)) + 
+    geom_point(size = 0.1)
   
-}
+  st_raster <- as_spatraster(st_tibble_sub, xycols = 3:4,
+                             crs = "WGS84", digits = 3)
 
-# Name the list
-names(dlist) <- paste(months, years, sep = "_")
-str(dlist)
+  ggplot() +
+    geom_spatraster(data = st_raster$bottomT, aes(fill = bottomT)) + 
+    scale_fill_viridis(option = "magma") +
+    ggtitle(i)
+  
+  ggplot() +
+    geom_spatraster(data = st_raster$sob, aes(fill = sob)) + 
+    scale_fill_viridis(option = "magma") +
+    ggtitle(i)
 
-# Create data holding object
-temp_data_list <- list()
-
-# This is our looping index: 
-# unique(dat_haul$month_year)
-# We do not have January 1993 in the oxygen raster. Replace that with february
-dat_haul_month_year <- unique(dat_haul$month_year)
-dat_haul_month_year[3] <- "2_1993"
-
-# Loop through each month_year and extract raster values for the cpue data points
-for(i in dat_haul_month_year) {
+  # Extract from raster
+  d_sub$temp <- terra::extract(st_raster$bottomT,
+                               d_sub |> dplyr::select(lon, lat))$bottomT
   
-  # Set plot limits
-  ymin = 54; ymax = 58; xmin = 12; xmax = 22
-  
-  # Subset a month-year combination
-  temp_slice <- dlist[[i]]
-  
-  # Create raster for that year (i)
-  r <- raster(t(temp_slice), xmn = min(lon), xmx = max(lon), ymn = min(lat), ymx = max(lat),
-              crs = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
-  
-  # Flip...
-  r <- flip(r, direction = 'y')
-  
-  plot(r, main = paste(i), ylim = c(ymin, ymax), xlim = c(xmin, xmax))
-  
-  # Filter the same year (i) in the cpue data and select only coordinates
-  d_slice <- dat_haul %>% filter(month_year == i) %>% dplyr::select(lon, lat)
-  
-  # Make into a SpatialPoints object
-  data_sp <- SpatialPoints(d_slice)
-  
-  # Extract raster value (oxygen)
-  rasValue <- raster::extract(r, data_sp)
-  
-  # Now we want to plot the results of the raster extractions by plotting the cpue data points over a raster and saving it for each year.
-  # Make the SpatialPoints object into a raster again (for plot)
-  df <- as.data.frame(data_sp)
-  
-  # Add in the raster value in the df holding the coordinates for the cpue data
-  d_slice$temp <- rasValue
-  
-  # Add in which year
-  d_slice$month_year <- i
-  
-  # Add each years' data in the list
-  temp_data_list[[i]] <- d_slice
+  d_sub$salinity <- terra::extract(st_raster$sob,
+                                   d_sub |> dplyr::select(lon, lat))$sob  
+   
+  # Save
+  st_list[[i]] <- d_sub
   
 }
 
-# Now create a data frame from the list of all annual values
-big_dat_temp <- dplyr::bind_rows(temp_data_list)
+d_st <- bind_rows(st_list)
 ```
 
-#### Salinity
+```{r join environmental data}
+#| message: false
 
-```{r salinity}
-# Open the netCDF file
-ncin <- nc_open(paste0(home, "/data/NEMO/cmems_mod_bal_phy_my_P1M-m_1691065974147.nc"))
+d_st2 <- d_st |> 
+  mutate(id = paste(month_year, lon, lat)) |> 
+  distinct(id, .keep_all = TRUE) |> 
+  dplyr::select(-id)
 
-print(ncin)
+d_oxy2 <- d_oxy |> 
+  mutate(id = paste(month_year, lon, lat)) |> 
+  distinct(id, .keep_all = TRUE) |> 
+  dplyr::select(-id)
 
-# Get longitude and latitude
-lon <- ncvar_get(ncin,"lon")
-nlon <- dim(lon)
-head(lon)
-
-lat <- ncvar_get(ncin,"lat")
-nlat <- dim(lat)
-head(lat)
-
-# Get time
-time <- ncvar_get(ncin,"time")
-time
-
-tunits <- ncatt_get(ncin,"time","units")
-nt <- dim(time)
-nt
-tunits
-
-# Get Salinity
-dname <- "sob"
-
-sal_array <- ncvar_get(ncin,dname)
-dlname <- ncatt_get(ncin,dname,"long_name")
-dunits <- ncatt_get(ncin,dname,"units")
-fillvalue <- ncatt_get(ncin,dname,"_FillValue")
-dim(sal_array)
-
-# Get global attributes
-title <- ncatt_get(ncin,0,"title")
-institution <- ncatt_get(ncin,0,"institution")
-datasource <- ncatt_get(ncin,0,"source")
-references <- ncatt_get(ncin,0,"references")
-history <- ncatt_get(ncin,0,"history")
-Conventions <- ncatt_get(ncin,0,"Conventions")
-
-# Convert time: split the time units string into fields
-tustr <- strsplit(tunits$value, " ")
-tdstr <- strsplit(unlist(tustr)[3], "-")
-tmonth <- as.integer(unlist(tdstr)[2])
-tday <- as.integer(unlist(tdstr)[3])
-tyear <- as.integer(unlist(tdstr)[1])
-
-# Here I deviate from the guide a little bit. Save this info:
-dates <- chron(time, origin = c(tmonth, tday, tyear))
-
-# Crop the date variable
-months <- as.numeric(substr(dates, 2, 3))
-years <- as.numeric(substr(dates, 8, 9))
-years <- ifelse(years > 90, 1900 + years, 2000 + years)
-
-# Replace netCDF fill values with NA's
-sal_array[sal_array == fillvalue$value] <- NA
-
-# Loop through all "dates", put into a list 
-dlist <- list()
-
-for(i in 1:length(months)) {
-  
-  sal_sub <- sal_array[, , i]
-  
-  dlist[[i]] <- sal_sub
-  
-}
-
-# Name the list
-names(dlist) <- paste(months, years, sep = "_")
-str(dlist)
-
-# Create data holding object
-sal_data_list <- list()
-
-# This is our looping index: 
-# unique(dat_haul$month_year)
-# We do not have January 1993 in the oxygen raster. Replace that with february
-dat_haul_month_year <- unique(dat_haul$month_year)
-dat_haul_month_year[3] <- "2_1993"
-
-# Loop through each month_year and extract raster values for the cpue data points
-for(i in dat_haul_month_year) {
-  
-  # Set plot limits
-  ymin = 54; ymax = 58; xmin = 12; xmax = 22
-  
-  # Subset a month-year combination
-  sal_slice <- dlist[[i]]
-  
-  # Create raster for that year (i)
-  r <- raster(t(sal_slice), xmn = min(lon), xmx = max(lon), ymn = min(lat), ymx = max(lat),
-              crs = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
-  
-  # Flip...
-  r <- flip(r, direction = 'y')
-  
-  plot(r, main = paste(i), ylim = c(ymin, ymax), xlim = c(xmin, xmax))
-  
-  # Filter the same year (i) in the cpue data and select only coordinates
-  d_slice <- dat_haul %>% filter(month_year == i) %>% dplyr::select(lon, lat)
-  
-  # Make into a SpatialPoints object
-  data_sp <- SpatialPoints(d_slice)
-  
-  # Extract raster value (oxygen)
-  rasValue <- raster::extract(r, data_sp)
-  
-  # Now we want to plot the results of the raster extractions by plotting the cpue data points over a raster and saving it for each year.
-  # Make the SpatialPoints object into a raster again (for plot)
-  df <- as.data.frame(data_sp)
-  
-  # Add in the raster value in the df holding the coordinates for the cpue data
-  d_slice$sal <- rasValue
-  
-  # Add in which year
-  d_slice$month_year <- i
-  
-  # Add each years' data in the list
-  sal_data_list[[i]] <- d_slice
-  
-}
-
-# Now create a data frame from the list of all annual values
-big_dat_sal <- dplyr::bind_rows(sal_data_list)
-```
-
-```{r merge oxygen temp and salinity data with fish data}
-env_dat <- left_join(big_dat_oxy, big_dat_temp, by = c("month_year", "lon", "lat")) |>
-  left_join(big_dat_sal, by = c("month_year", "lon", "lat"))
+env_dat <- d_st2 |> 
+  left_join(d_oxy2 |> dplyr::select(-year, -month), by = c("month_year", "lon", "lat")) |> 
+  dplyr::select(month_year, lon, lat, temp, salinity, oxy)
 ```
 
 #### Depth
 
 ```{r depth}
+#| message: false
+
 # Only use unique locations and then left_join else it will take forever
 # https://gis.stackexchange.com/questions/411261/read-multiple-layers-raster-from-ncdf-file-using-terra-package
 # https://emodnet.ec.europa.eu/geoviewer/
-dep_raster <- terra::rast(paste0(home, "/data/Mean depth natural colour (with land).nc"))
+dep_raster <- terra::rast(paste0(home, "/data/covariates/depth/Mean depth natural colour (with land).nc"))
 
 class(dep_raster)
 plot(dep_raster)
@@ -1426,532 +1159,32 @@ ggplot(env_dat, aes(lon, lat, color = depth*-1)) +
 env_dat$depth <- env_dat$depth*-1
 ```
 
-#### Substrate
-
-```{r substrate}
-substrate <- terra::rast(paste0(home, "/data/substrate-tif/BALANCE_SEABED_SEDIMENT.tif"))
-
-newcrs <- "+proj=longlat +datum=WGS84"
-
-substrate_longlat = terra::project(substrate, newcrs)
- 
-plot(substrate_longlat)
-
-# Now extract the values from the saduria raster to dat
-env_dat$substrate <- terra::extract(substrate_longlat, env_dat |> dplyr::select(lon, lat))$BALANCE_SEABED_SEDIMENT
-
-unique(env_dat$substrate)
-
-factor(sort(unique(round(env_dat$substrate))))
- 
-env_dat$substrate <- round(env_dat$substrate)
-
-env_dat <- env_dat %>% mutate(substrate = ifelse(substrate == 1, "bedrock", substrate),
-                              substrate = ifelse(substrate == 2, "hard-bottom complex",
-                                                 substrate),
-                              substrate = ifelse(substrate == 3, "sand", substrate),
-                              substrate = ifelse(substrate == 4, "hard clay", substrate),
-                              substrate = ifelse(substrate == 5, "mud", substrate))
-
-# I. Bedrock.
-# II. Hard bottom complex, includes patchy hard surfaces and coarse sand (sometimes also clay) to boulders.
-# III. Sand including fine to coarse sand (with gravel exposures).
-# IV. Hard clay sometimes/often/possibly exposed or covered with a thin layer of sand/gravel.
-# V. Mud including gyttja-clay to gyttja-silt.
-
-# Plot
-ggplot(env_dat, aes(lon, lat, color = substrate)) +
-  geom_point()
-```
-
 ```{r join}
+#| message: false
+
 # Now join these data with the full_dat
+
 dat_full <- left_join(dat, env_dat, by = c("month_year", "lon", "lat"))
 ```
 
 ## Add UTM coords
 
 ```{r add coords}
+#| message: false
+
 # Add UTM coords
 dat_full <- dat_full |> add_utm_columns(ll_names = c("lon", "lat"),
-                                        utm_crs = 32633)
+                                         utm_crs = 32633)
 ```
 
 ## Save data
 
 ```{r save}
+#| message: false
+
 dat_full_save <- dat_full |>
   dplyr::select(-IDx, -haul.id.size) |> 
   janitor::clean_names()
 
 write_csv(dat_full_save, file = paste0(home, "/data/clean/catch_by_length.csv"))
-```
-
-#### Compare cod data with Orio et al (2017)
-
-```{r}
-knitr::knit_exit()
-```
-
-Check this later...
-
-```{r, message=FALSE}
-# Read Orio data first for comparison (testing total haul-level CPUE here, not size-specific)
-test_cod <- hlcodhaul |> filter(!Country == "SWE")
-test_fle <- hlflehaul |> filter(!Country == "SWE")
-
-orio_cod <- read.csv("/Users/maxlindmark/Dropbox/Max work/R/gear_standardization_ale/datras_st_ale.csv")
-orio_fle <- read.csv("/Users/maxlindmark/Dropbox/Max work/R/gear_standardization_ale/datras_fle_st_ale.csv")
-
-orio_cod <- orio_cod |>
-  group_by(IDX) |>
-  mutate(haul_cpue_kg = sum(CPUEstBIOyear),
-         haul_cpue = sum(CPUEst),
-         haul_cpue_kg_un = sum(CPUEunBIOyear),
-         haul_cpue_un = sum(CPUEun)) |>
-  ungroup() |>
-  distinct(IDX, .keep_all = TRUE)
-
-orio_fle <- orio_fle |>
-  group_by(IDX) |>
-  mutate(haul_cpue_kg = sum(CPUEstBIOyear),
-         haul_cpue = sum(CPUEst),
-         haul_cpue_kg_un = sum(CPUEunBIOyear),
-         haul_cpue_un = sum(CPUEun)) |>
-  ungroup() |>
-  distinct(IDX, .keep_all = TRUE)
-
-# hlcodhaul |> group_by(IDx) |> mutate(n = n()) |> ungroup() |> distinct(n)
-
-# # Standardize data for easier plotting
-# test_cod |>
-#   group_by(haul.id) |>
-#   summarise(n = n()) |>
-#   distinct(n)
-
-test_cod_q1 <- test_cod |>
-  group_by(haul.id) |>
-  mutate(haul_cpue_kg = sum(haul_cpue_kg),
-         haul_cpue = sum(haul_cpue),
-         haul_cpue_kg_un = sum(haul_cpue_kg_un),
-         haul_cpue_un = sum(haul_cpue_un),
-         density = haul_cpue_kg/0.45,
-         density_ab = haul_cpue/0.45) |>
-  distinct(haul.id, .keep_all = TRUE) |> 
-  dplyr::select(haul_cpue_kg, haul_cpue, haul_cpue_kg_un, haul_cpue_un, Year, Ship3, Country, Gear, Quarter) |> 
-  mutate(source = "Max",
-         species = "Cod") |> 
-  rename("Ship" = "Ship3") |> 
-  filter(Year > 1992 & Year < 2017 & Quarter == 1)
-
-test_cod_q4 <- test_cod |>
-  group_by(haul.id) |>
-  mutate(haul_cpue_kg = sum(haul_cpue_kg),
-         haul_cpue = sum(haul_cpue),
-         haul_cpue_kg_un = sum(haul_cpue_kg_un),
-         haul_cpue_un = sum(haul_cpue_un),
-         density = haul_cpue_kg/0.45,
-         density_ab = haul_cpue/0.45) |>
-  distinct(haul.id, .keep_all = TRUE) |> 
-  dplyr::select(haul_cpue_kg, haul_cpue, haul_cpue_kg_un, haul_cpue_un, Year, Ship3, Country, Gear, Quarter) |>
-  mutate(source = "Max",
-         species = "Cod") |> 
-  rename("Ship" = "Ship3") |> 
-  filter(Year > 1992 & Year < 2017 & Quarter == 4)
-
-test_fle_q1 <- test_fle |>
-  group_by(haul.id) |>
-  mutate(haul_cpue_kg = sum(haul_cpue_kg),
-         haul_cpue = sum(haul_cpue),
-         haul_cpue_kg_un = sum(haul_cpue_kg_un),
-         haul_cpue_un = sum(haul_cpue_un),
-         density = haul_cpue_kg/0.45,
-         density_ab = haul_cpue/0.45) |> 
-  distinct(haul.id, .keep_all = TRUE) |> 
-  dplyr::select(haul_cpue_kg, haul_cpue, haul_cpue_kg_un, haul_cpue_un, Year, Ship3, Country, Gear, Quarter) |> 
-  mutate(source = "Max",
-         species = "Fle") |> 
-  rename("Ship" = "Ship3") |> 
-  filter(Year > 1992 & Year < 2017 & Quarter == 1)
-
-test_fle_q4 <- test_fle |>
-    group_by(haul.id) |>
-    mutate(haul_cpue_kg = sum(haul_cpue_kg),
-         haul_cpue = sum(haul_cpue),
-         haul_cpue_kg_un = sum(haul_cpue_kg_un),
-         haul_cpue_un = sum(haul_cpue_un),
-         density = haul_cpue_kg/0.45,
-         density_ab = haul_cpue/0.45) |> 
-  distinct(haul.id, .keep_all = TRUE) |> 
-  dplyr::select(haul_cpue_kg, haul_cpue, haul_cpue_kg_un, haul_cpue_un, Year, Ship3, Country, Gear, Quarter) |> 
-  mutate(source = "Max",
-         species = "Fle") |> 
-  rename("Ship" = "Ship3") |> 
-  filter(Year > 1992 & Year < 2017 & Quarter == 4)
-
-orio_cod_q1 <- orio_cod |>
-  dplyr::select(haul_cpue_kg, haul_cpue, haul_cpue_kg_un, haul_cpue_un, year, vessel, IDX) |> 
-  mutate(source = "Ale",
-         species = "Cod") |> 
-  rename("Year" = "year",
-         "Ship" = "vessel") |> 
-  mutate(IDX2 = IDX,
-         IDX3 = IDX) |> 
-  separate(IDX, sep = c(5:7), into = c("temp_year", "Quarter")) |> 
-  separate(temp_year, sep = c(4:5), into = c("Year", "scrap")) |> 
-  separate(IDX2, sep = 7, into = c("scrap2", "Country")) |>
-  separate(Country, sep = 3, into = c("Country", "scrap3")) |>
-  separate(IDX3, sep = 15, into = c("scrap4", "Gear")) |>
-  separate(Gear, sep = 3, into = c("Gear", "scrap5")) |> 
-  dplyr::select(-scrap, -scrap2, -scrap3, -scrap4, -scrap5) |> 
-  filter(Quarter == 1) |> 
-  mutate(Year = as.integer(Year),
-         Quarter = as.integer(Quarter)) |> 
-  mutate(haul_cpue_kg = haul_cpue_kg/1000,
-         haul_cpue_kg_un = haul_cpue_kg_un/1000) |> 
-  filter(Year > 1992) |> 
-  filter(Country %in% unique(test_cod$Country))
-
-orio_cod_q4 <- orio_cod |>
-  dplyr::select(haul_cpue_kg, haul_cpue, haul_cpue_kg_un, haul_cpue_un, year, vessel, IDX) |> 
-  mutate(source = "Ale",
-         species = "Cod") |> 
-  rename("Year" = "year",
-         "Ship" = "vessel") |> 
-  mutate(IDX2 = IDX,
-         IDX3 = IDX) |> 
-  separate(IDX, sep = c(5:7), into = c("temp_year", "Quarter")) |> 
-  separate(temp_year, sep = c(4:5), into = c("Year", "scrap")) |> 
-  separate(IDX2, sep = 7, into = c("scrap2", "Country")) |>
-  separate(Country, sep = 3, into = c("Country", "scrap3")) |>
-  separate(IDX3, sep = 15, into = c("scrap4", "Gear")) |>
-  separate(Gear, sep = 3, into = c("Gear", "scrap5")) |> 
-  dplyr::select(-scrap, -scrap2, -scrap3, -scrap4, -scrap5) |> 
-  filter(Quarter == 4) |> 
-  mutate(Year = as.integer(Year),
-         Quarter = as.integer(Quarter)) |> 
-  mutate(haul_cpue_kg = haul_cpue_kg/1000,
-         haul_cpue_kg_un = haul_cpue_kg_un/1000) |> 
-  filter(Year > 1992) |> 
-  filter(Country %in% unique(test_cod$Country))
-
-orio_fle_q1 <- orio_fle |> 
-  dplyr::select(haul_cpue_kg, haul_cpue, haul_cpue_kg_un, haul_cpue_un, year, vessel, IDX) |> 
-  mutate(source = "Ale",
-         species = "Fle") |> 
-  rename("Year" = "year",
-         "Ship" = "vessel") |> 
-  mutate(IDX2 = IDX,
-         IDX3 = IDX) |> 
-  separate(IDX, sep = c(5:7), into = c("temp_year", "Quarter")) |> 
-  separate(temp_year, sep = c(4:5), into = c("Year", "scrap")) |> 
-  separate(IDX2, sep = 7, into = c("scrap2", "Country")) |>
-  separate(Country, sep = 3, into = c("Country", "scrap3")) |>
-  separate(IDX3, sep = 15, into = c("scrap4", "Gear")) |>
-  separate(Gear, sep = 3, into = c("Gear", "scrap5")) |> 
-  dplyr::select(-scrap, -scrap2, -scrap3, -scrap4, -scrap5) |> 
-  filter(Quarter == 1) |> 
-  mutate(Year = as.integer(Year),
-         Quarter = as.integer(Quarter)) |> 
-  mutate(haul_cpue_kg = haul_cpue_kg/1000,
-         haul_cpue_kg_un = haul_cpue_kg_un/1000) |> 
-  filter(Year > 1992) |> 
-  filter(Country %in% unique(test_cod$Country))
-
-orio_fle_q4 <- orio_fle |> 
-  dplyr::select(haul_cpue_kg, haul_cpue, haul_cpue_kg_un, haul_cpue_un, year, vessel, IDX) |> 
-  mutate(source = "Ale",
-         species = "Fle") |> 
-  rename("Year" = "year",
-         "Ship" = "vessel") |> 
-  mutate(IDX2 = IDX,
-         IDX3 = IDX) |> 
-  separate(IDX, sep = c(5:7), into = c("temp_year", "Quarter")) |> 
-  separate(temp_year, sep = c(4:5), into = c("Year", "scrap")) |> 
-  separate(IDX2, sep = 7, into = c("scrap2", "Country")) |>
-  separate(Country, sep = 3, into = c("Country", "scrap3")) |>
-  separate(IDX3, sep = 15, into = c("scrap4", "Gear")) |>
-  separate(Gear, sep = 3, into = c("Gear", "scrap5")) |> 
-  dplyr::select(-scrap, -scrap2, -scrap3, -scrap4, -scrap5) |> 
-  filter(Quarter == 4) |> 
-  mutate(Year = as.integer(Year),
-         Quarter = as.integer(Quarter)) |> 
-  mutate(haul_cpue_kg = haul_cpue_kg/1000,
-         haul_cpue_kg_un = haul_cpue_kg_un/1000) |> 
-  filter(Year > 1992) |> 
-  filter(Country %in% unique(test_cod$Country))
-
-sort(unique(test_cod_q1$Country))
-sort(unique(orio_cod_q1$Country))
-```
-
-```{r proportion 0 comparison}
-prop_zero(test_cod_q1)
-prop_zero(orio_cod_q1)
-
-prop_zero(test_cod_q4)
-prop_zero(orio_cod_q4)
-
-prop_zero(test_fle_q1)
-prop_zero(orio_fle_q1)
-
-prop_zero(test_fle_q4)
-prop_zero(orio_fle_q4)
-
-# Plot proportion of 0 catches by year and country
-# q1 cod
-zero_q1_cod_ml <- test_cod_q1 |> 
-  mutate(zero_catch = ifelse(haul_cpue_kg == 0, "Y", "N")) |>
-  group_by(Year, Country, zero_catch) |> 
-  summarise(n = n()) |> 
-  mutate(per = prop.table(n) * 100,
-         source = "ml")
-
-zero_q1_cod_ale <- orio_cod_q1 |> 
-  mutate(zero_catch = ifelse(haul_cpue_kg == 0, "Y", "N")) |>
-  group_by(Year, Country, zero_catch) |> 
-  summarise(n = n()) |> 
-  mutate(per = prop.table(n) * 100,
-         source = "ale")
-
-bind_rows(zero_q1_cod_ale, zero_q1_cod_ml) |> 
-  filter(zero_catch == "Y") |> 
-  ggplot(aes(Year, per, color = source, linetype = source)) +
-  geom_line() +
-  geom_point() + 
-  facet_wrap(~Country, scales = "free")
-
-# q4 cod
-zero_q4_cod_ml <- test_cod_q4 |> 
-  mutate(zero_catch = ifelse(haul_cpue_kg == 0, "Y", "N")) |>
-  group_by(Year, Country, zero_catch) |> 
-  summarise(n = n()) |> 
-  mutate(per = prop.table(n) * 100,
-         source = "ml")
-
-zero_q4_cod_ale <- orio_cod_q4 |> 
-  mutate(zero_catch = ifelse(haul_cpue_kg == 0, "Y", "N")) |>
-  group_by(Year, Country, zero_catch) |> 
-  summarise(n = n()) |> 
-  mutate(per = prop.table(n) * 100,
-         source = "ale")
-
-bind_rows(zero_q4_cod_ale, zero_q4_cod_ml) |> 
-  filter(zero_catch == "Y") |> 
-  ggplot(aes(Year, per, color = source, linetype = source)) +
-  geom_line() +
-  geom_point() + 
-  facet_wrap(~Country, scales = "free")
-
-
-# q1 fle
-zero_q1_fle_ml <- test_fle_q1 |> 
-  mutate(zero_catch = ifelse(haul_cpue_kg == 0, "Y", "N")) |>
-  group_by(Year, Country, zero_catch) |> 
-  summarise(n = n()) |> 
-  mutate(per = prop.table(n) * 100,
-         source = "ml")
-
-zero_q1_fle_ale <- orio_fle_q1 |> 
-  mutate(zero_catch = ifelse(haul_cpue_kg == 0, "Y", "N")) |>
-  group_by(Year, Country, zero_catch) |> 
-  summarise(n = n()) |> 
-  mutate(per = prop.table(n) * 100,
-         source = "ale")
-
-bind_rows(zero_q1_fle_ale, zero_q1_fle_ml) |> 
-  filter(zero_catch == "Y") |> 
-  ggplot(aes(Year, per, color = source, linetype = source)) +
-  geom_line() +
-  geom_point() + 
-  facet_wrap(~Country, scales = "free")
-
-
-# q4 fle
-zero_q4_fle_ml <- test_fle_q4 |> 
-  mutate(zero_catch = ifelse(haul_cpue_kg == 0, "Y", "N")) |>
-  group_by(Year, Country, zero_catch) |> 
-  summarise(n = n()) |> 
-  mutate(per = prop.table(n) * 100,
-         source = "ml")
-
-zero_q4_fle_ale <- orio_fle_q4 |> 
-  mutate(zero_catch = ifelse(haul_cpue_kg == 0, "Y", "N")) |>
-  group_by(Year, Country, zero_catch) |> 
-  summarise(n = n()) |> 
-  mutate(per = prop.table(n) * 100,
-         source = "ale")
-
-bind_rows(zero_q4_fle_ale, zero_q4_fle_ml) |> 
-  filter(zero_catch == "Y") |> 
-  ggplot(aes(Year, per, color = source, linetype = source)) +
-  geom_line() +
-  geom_point() + 
-  facet_wrap(~Country, scales = "free")
-```
-
-```{r compare abundance}
-test_full <- bind_rows(orio_fle_q1, orio_fle_q4, orio_cod_q1, orio_cod_q4,
-                       test_cod_q1, test_cod_q4, test_fle_q1, test_fle_q4)
-
-# Check the non-standardized data for cod
-# Raw abundance cpue
-test_full |> 
-  filter(species == "Cod") |> 
-  ggplot(., aes(factor(Year), haul_cpue_un, color = source)) + 
-  geom_point(size = 1, position = position_dodge(width = 0.5)) + 
-  theme(axis.text.x = element_text(angle = 90)) +
-  facet_wrap(~Quarter) +
-  NULL
-  
-test_full |> 
-  filter(species == "Cod" & Quarter == 1) |> 
-  ggplot(., aes(haul_cpue_un, fill = source)) + 
-  geom_histogram(position = position_dodge()) + 
-  facet_wrap(~Year, scale = "free") +
-  theme(axis.text.x = element_text(angle = 90)) + 
-  NULL
-
-test_full |> 
-  filter(species == "Cod" & Quarter == 4) |> 
-  ggplot(., aes(haul_cpue_un, fill = source)) + 
-  geom_histogram(position = position_dodge()) + 
-  facet_wrap(~Year, scale = "free") +
-  theme(axis.text.x = element_text(angle = 90)) + 
-  NULL
-
-# Mean abundance cpue
-test_full |> 
-  filter(species == "Cod") |> 
-  group_by(Year, Quarter, source) |> 
-  summarise(mean_cpue = mean(haul_cpue_un),
-            sd_cpue = sd(haul_cpue_un)) |> 
-  ggplot(., aes(Year, mean_cpue, linetype = source, color = source)) + 
-  geom_line(size = 1.1) +
-  geom_point(size = 3) + 
-  facet_wrap(~Quarter, ncol = 1) +
-  NULL
-
-# Mean abundance cpue by country
-test_full |> 
-  filter(species == "Cod") |> 
-  group_by(Year, source, Quarter, Country) |> 
-  summarise(mean_cpue = mean(haul_cpue_un),
-            sd_cpue = sd(haul_cpue_un)) |> 
-  ggplot(., aes(Year, mean_cpue, linetype = source, color = source)) + 
-  geom_line(size = 1.1) +
-  facet_grid(Quarter ~ Country) +
-  NULL
-
-# Mean abundance cpue for non-zero cathes
-test_full |> 
-  filter(species == "Cod") |> 
-  filter(haul_cpue_un > 0) |> 
-  group_by(Year, Quarter, source) |> 
-  summarise(mean_cpue = mean(haul_cpue_un),
-            sd_cpue = sd(haul_cpue_un)) |> 
-  ggplot(., aes(Year, mean_cpue, linetype = source, color = source)) + 
-  geom_line(size = 1.1) +
-  geom_point(size = 3) + 
-  facet_wrap(~ Quarter, ncol = 1) +
-  NULL
-
-# Now plot corrected biomass cpue
-test_full |> 
-  filter(species == "Cod") |> 
-  ggplot(., aes(factor(Year), haul_cpue_kg, color = source)) + 
-  geom_point(size = 1, position = position_dodge(width = 0.5)) + 
-  theme(axis.text.x = element_text(angle = 90)) +
-  facet_wrap(~ Quarter, ncol = 1) +
-  NULL
-
-# Mean corrected biomass cpue
-test_full |> 
-  filter(species == "Cod") |> 
-  group_by(Year, Quarter, source) |> 
-  summarise(mean_cpue = mean(haul_cpue_kg),
-            sd_cpue = sd(haul_cpue_kg)) |> 
-  ggplot(., aes(Year, mean_cpue, linetype = source, color = source)) + 
-  geom_line(size = 1.1) +
-  geom_point(size = 3) + 
-  facet_wrap(~ Quarter, ncol = 1) +
-  NULL
-
-# Now check in on flounder
-# Raw abundance cpue
-test_full |> 
-  filter(species == "Fle") |> 
-  ggplot(., aes(factor(Year), haul_cpue_un, color = source)) + 
-  geom_point(size = 1, position = position_dodge(width = 0.5)) + 
-  theme(axis.text.x = element_text(angle = 90)) +
-  facet_wrap(~ Quarter, ncol = 1) +
-  NULL
-  
-test_full |> 
-  filter(species == "Fle" & Quarter == 1) |> 
-  ggplot(., aes(haul_cpue_un, fill = source)) + 
-  geom_histogram(position = position_dodge()) + 
-  facet_wrap(~Year, scale = "free") +
-  theme(axis.text.x = element_text(angle = 90)) + 
-  NULL
-
-test_full |> 
-  filter(species == "Fle" & Quarter == 4) |> 
-  ggplot(., aes(haul_cpue_un, fill = source)) + 
-  geom_histogram(position = position_dodge()) + 
-  facet_wrap(~Year, scale = "free") +
-  theme(axis.text.x = element_text(angle = 90)) + 
-  NULL
-
-# Mean abundance cpue
-test_full |> 
-  filter(species == "Fle") |> 
-  group_by(Year, Quarter, source) |> 
-  summarise(mean_cpue = mean(haul_cpue_un),
-            sd_cpue = sd(haul_cpue_un)) |> 
-  ggplot(., aes(Year, mean_cpue, linetype = source, color = source)) + 
-  geom_line(size = 1.1) +
-  geom_point(size = 3) + 
-  facet_wrap(~ Quarter, ncol = 1) +
-  NULL
-
-# Ok, here we can see that Ale predicts an increase earlier, which we also saw 
-# on the plot of raw catches as points
-# Mean abundance cpue by country to see how this can arise
-test_full |> 
-  filter(species == "Fle") |> 
-  group_by(Year, Quarter, source, Country) |> 
-  summarise(mean_cpue = mean(haul_cpue_un),
-            sd_cpue = sd(haul_cpue_un)) |> 
-  ggplot(., aes(Year, mean_cpue, linetype = source, color = source)) + 
-  geom_line(size = 1.1) +
-  facet_grid(Quarter ~ Country) +
-  NULL
-
-# Ok, after checking, the reason I don't have the older LAT data is because I don't
-# have RS or RSA-values for those hauls, even though the catch data are in datras...
-# Should probably check with Ale how he corrected those!
-
-# Now plot corrected biomass cpue
-test_full |> 
-  filter(species == "Fle") |> 
-  ggplot(., aes(factor(Year), haul_cpue_kg, color = source)) + 
-  geom_point(size = 1, position = position_dodge(width = 0.5)) + 
-  theme(axis.text.x = element_text(angle = 90)) +
-  facet_wrap(~ Quarter, ncol = 1) +
-  NULL
-
-# Mean corrected biomass cpue
-test_full |> 
-  filter(species == "Fle") |> 
-  group_by(Year, Quarter, source) |> 
-  summarise(mean_cpue = mean(haul_cpue_kg),
-            sd_cpue = sd(haul_cpue_kg)) |> 
-  ggplot(., aes(Year, mean_cpue, linetype = source, color = source)) + 
-  geom_line(size = 1.1) +
-  geom_point(size = 3) + 
-  facet_wrap(~ Quarter, ncol = 1) +
-  NULL
-
-# Then check length-weight relationships again
 ```

@@ -55,6 +55,10 @@ data/substrate-tif/
 data/saduria-tif/
 data/clean/catch_by_length.csv
 data/bias
+data/covariates/
+data/shapefiles/
+data/cpue-standardization/
+data/datras/
 data/Mean depth natural colour (with land).nc
 
 # Reports
@@ -71,6 +75,9 @@ decktape/
 # Data
 # Old exploratory stuff
 */old
+
+# Scrap
+*/scrap
 
 # Supp figures
 figures/supp/cpue_oxygen_rasters/

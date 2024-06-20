@@ -1,0 +1,313 @@
+---
+title: "Prepare stomach content data"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format: 
+  html:
+    embed-resources: true
+    fig-width: 8
+    #fig-asp: 0.618
+knitr: 
+  opts_chunk:
+    fig.align: center
+editor: source
+execute: 
+  echo: true
+  eval: true
+  cache: false
+---
+
+## Load libraries
+
+```{r libs}
+#| message: false
+#| warning: false
+library(tidyverse)
+library(janitor)
+library(devtools)
+library(sdmTMB)
+library(patchwork)
+library(terra)
+library(tidync)
+library(tidyterra)
+library(ncdf4)
+library(viridis)
+library(readxl)
+library(tidylog)
+
+# Import some plotting functions
+# Source code for map plots
+# You need: # devtools::install_github("seananderson/ggsidekick") # not on CRAN; library(ggsidekick)
+devtools::source_url("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/R/functions/map-plot.R")
+options(ggplot2.continuous.colour = "viridis")
+
+# Set path
+home <- here::here()
+```
+
+## Read data
+
+Data stem from [Viktor Thunell](https://github.com/VThunell/Lammska_cod-fr/blob/main/R/prepare-data/01-prepare-stomach-data.qmd)) (and Lindmark et al 2024, prepared in "data/clean/full_stomach_data_x.csv" to add 2023, which was not included in that paper)
+
+```{r}
+#| message: false
+d <- #read_csv("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/data/clean/catch_clean.csv") |> 
+  read_csv(paste0(home, "/data/stomach/stomachs3.csv")) |> 
+  filter(year >= 1993) |> 
+  dplyr::select(fr_tot, fr_sad, fr_spr, fr_her, year, month, day, day_of_year, pred_weight,
+                pred_length, lat, lon, ices_rect, X, Y, data_source, Country) |> 
+  filter(fr_tot > 0 & fr_tot < quantile(fr_tot, .99))
+```
+
+## Add pelagic covariates
+
+```{r}
+#| message: false
+# Read data on rectangle level
+spr <- read_xlsx(paste0(home, "/data/covariates/pelagic/N and B per Rect. 1991-2023.xlsx"),
+                 sheet = 4) |>
+  rename(ices_rect = RECT,
+         year = ANNUS) |>
+  mutate_at(vars(`1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`), ~replace_na(., 0)) |> # I need to replace NA with 0, else I can't sum! According to Olavi who sent the data, NA means 0 and nothing else. Rectangle*year combinations that do not have information about biomass are simply not included in this data
+  mutate(ices_rect = as.factor(ices_rect),
+         Species = "Sprat",
+         biomass_spr = `1`+`2`+`3`+`4`+`5`+`6`+`7`+`8`, 
+         id_r = paste(ices_rect, year, sep = "_")) |> 
+  filter(year >= 1993) |> 
+  dplyr::select(year, ices_rect, biomass_spr) |> 
+  summarise(biomass_spr = mean(biomass_spr), .by = c(ices_rect, year))
+
+her <- read_xlsx(paste0(home, "/data/covariates/pelagic/N and B per Rect. 1991-2023.xlsx"),
+                 sheet = 3) |>
+  rename(ices_rect = RECT,
+         year = ANNUS) |>
+  mutate_at(vars(`1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`), ~replace_na(., 0)) |> # I need to replace NA with 0, else I can't sum! According to Olavi who sent the data, NA means 0 and nothing else. Rectangle*year combinations that do not have information about biomass are simply not included in this data
+  mutate(ices_rect = as.factor(ices_rect),
+         Species = "Sprat",
+         biomass_her = `1`+`2`+`3`+`4`+`5`+`6`+`7`+`8`, 
+         id_r = paste(ices_rect, year, sep = "_")) |> 
+  filter(year >= 1993) |> 
+  dplyr::select(year, ices_rect, biomass_her) |> 
+  summarise(biomass_her = mean(biomass_her), .by = c(ices_rect, year))
+
+pelagics <- left_join(spr, her, by = c("year", "ices_rect"))
+
+d <- d |> tidylog::left_join(pelagics, by = c("year", "ices_rect"))
+```
+
+## Add in the environmental variables
+
+```{r add env vars}
+#| message: false
+# Only need 1 row per haul
+dat <- d |>
+  mutate(month_year = paste(month, year, sep = "_"))
+
+covPath <- paste0(home, "/data/covariates")
+```
+
+#### Oxygen
+
+```{r oxygen}
+#| message: false
+# Source: 
+# https://data.marine.copernicus.eu/product/BALTICSEA_ANALYSISFORECAST_BGC_003_007/download?dataset=cmems_mod_bal_bgc_anfc_P1M-m_202311
+# https://data.marine.copernicus.eu/product/BALTICSEA_MULTIYEAR_BGC_003_012/download?dataset=cmems_mod_bal_bgc_my_P1M-m_202303
+# Print details
+print(nc_open(paste(covPath, "oxygen", "cmems_mod_bal_bgc_my_P1M-m_1718018848983.nc", sep = "/")))
+
+oxy_tibble <- tidync(paste(covPath, "oxygen",
+                           "cmems_mod_bal_bgc_my_P1M-m_1718018848983.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_"),
+         oxy = o2b * 0.0223909)
+
+# Now do recent data (forecast)
+print(nc_open(paste(covPath, "oxygen", "cmems_mod_bal_bgc_anfc_P1M-m_1718022118172.nc", sep = "/")))
+
+oxy_tibble_new <- tidync(paste(covPath, "oxygen",
+                            "cmems_mod_bal_bgc_anfc_P1M-m_1718022118172.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_"),
+         oxy = o2b * 0.0223909) |> 
+  filter(year > 2021)
+
+oxy_tibble <- bind_rows(oxy_tibble, oxy_tibble_new)
+
+# Loop through all year combos, extract the temperatures at the data locations
+oxy_list <- list()
+
+for(i in unique(dat$month_year)) {
+  
+  d_sub <- filter(dat, month_year == i)
+  oxy_tibble_sub <- filter(oxy_tibble, month_year == i)
+  
+  # Convert to raster
+  ggplot(oxy_tibble_sub, aes(longitude, latitude)) + 
+    geom_point(size = 0.1)
+  
+  oxy_raster <- as_spatraster(oxy_tibble_sub, xycols = 2:3,
+                              crs = "WGS84", digits = 3)
+
+  ggplot() +
+    geom_spatraster(data = oxy_raster$oxy, aes(fill = oxy)) + 
+    scale_fill_viridis(option = "magma") +
+    ggtitle(i)
+
+  # Extract from raster
+  d_sub$oxy <- terra::extract(oxy_raster$oxy,
+                              d_sub |> dplyr::select(lon, lat))$oxy  
+   
+  # Save
+  oxy_list[[i]] <- d_sub
+  
+}
+
+d_oxy <- bind_rows(oxy_list)
+```
+
+#### Temperature & Salinity
+
+```{r temperature}
+#| message: false
+# Source
+# https://data.marine.copernicus.eu/product/BALTICSEA_MULTIYEAR_PHY_003_011/description
+# https://data.marine.copernicus.eu/product/BALTICSEA_ANALYSISFORECAST_PHY_003_006/description
+# Print details
+print(nc_open(paste(covPath, "temperature_salinity", "cmems_mod_bal_phy_my_P1M-m_1718087629163.nc", sep = "/")))
+
+st_tibble <- tidync(paste(covPath, "temperature_salinity",
+                          "cmems_mod_bal_phy_my_P1M-m_1718087629163.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_"))
+
+# Now do recent data (forecast)
+print(nc_open(paste(covPath, "temperature_salinity", "cmems_mod_bal_phy_anfc_P1M-m_1718087127439.nc", sep = "/")))
+
+st_tibble_new <- tidync(paste(covPath, "temperature_salinity",
+                              "cmems_mod_bal_phy_anfc_P1M-m_1718087127439.nc", sep = "/")) |>
+  hyper_tibble() |> 
+  mutate(date = as_datetime(time, origin = '1970-01-01')) |>
+  mutate(month = month(date),
+         day = day(date),
+         year = year(date),
+         month_year = paste(month, year, sep = "_")) |> 
+  filter(year > 2021)
+
+st_tibble <- bind_rows(st_tibble, st_tibble_new)
+
+# Loop through all year combos, extract the temperatures at the data locations
+st_list <- list()
+
+for(i in unique(dat$month_year)) {
+  
+  d_sub <- filter(dat, month_year == i)
+  st_tibble_sub <- filter(st_tibble, month_year == i)
+  
+  # Convert to raster
+  ggplot(st_tibble_sub, aes(longitude, latitude)) + 
+    geom_point(size = 0.1)
+  
+  st_raster <- as_spatraster(st_tibble_sub, xycols = 3:4,
+                             crs = "WGS84", digits = 3)
+
+  ggplot() +
+    geom_spatraster(data = st_raster$bottomT, aes(fill = bottomT)) + 
+    scale_fill_viridis(option = "magma") +
+    ggtitle(i)
+  
+  ggplot() +
+    geom_spatraster(data = st_raster$sob, aes(fill = sob)) + 
+    scale_fill_viridis(option = "magma") +
+    ggtitle(i)
+
+  # Extract from raster
+  d_sub$temp <- terra::extract(st_raster$bottomT,
+                               d_sub |> dplyr::select(lon, lat))$bottomT
+  
+  d_sub$salinity <- terra::extract(st_raster$sob,
+                                   d_sub |> dplyr::select(lon, lat))$sob  
+   
+  # Save
+  st_list[[i]] <- d_sub
+  
+}
+
+d_st <- bind_rows(st_list)
+```
+
+```{r join environmental data}
+#| message: false
+d_st2 <- d_st |> 
+  mutate(id = paste(month_year, lon, lat)) |> 
+  distinct(id, .keep_all = TRUE) |> 
+  dplyr::select(-id)
+
+d_oxy2 <- d_oxy |> 
+  mutate(id = paste(month_year, lon, lat)) |> 
+  distinct(id, .keep_all = TRUE) |> 
+  dplyr::select(-id)
+
+env_dat <- d_st2 |> 
+  left_join(d_oxy2 |> dplyr::select(month_year, lon, lat, oxy), by = c("month_year", "lon", "lat")) |> 
+  dplyr::select(month_year, lon, lat, temp, salinity, oxy)
+```
+
+#### Depth
+
+```{r depth}
+#| message: false
+# Only use unique locations and then left_join else it will take forever
+# https://gis.stackexchange.com/questions/411261/read-multiple-layers-raster-from-ncdf-file-using-terra-package
+# https://emodnet.ec.europa.eu/geoviewer/
+dep_raster <- terra::rast(paste0(home, "/data/covariates/depth/Mean depth natural colour (with land).nc"))
+
+class(dep_raster)
+plot(dep_raster)
+
+env_dat$depth <- terra::extract(dep_raster, env_dat |> dplyr::select(lon, lat))$elevation
+
+ggplot(env_dat, aes(lon, lat, color = depth*-1)) + 
+  geom_point() + 
+  scale_color_viridis(direction = -1)
+
+env_dat$depth <- env_dat$depth*-1
+```
+
+#### Saduria
+
+```{r saduria}
+saduria <- terra::rast(paste0(home, "/data/covariates/saduria/FWBiomassm_raster_19812019presHighweightcor_no0_newZi.tif"))
+
+WGS84 <- "+proj=longlat +datum=WGS84"
+
+saduria_latlon <- terra::project(saduria, WGS84)
+
+density_saduria <- terra::extract(saduria_latlon, env_dat |> dplyr::select(lon, lat))
+
+env_dat$saduria <- density_saduria$FWBiomassm_raster_19812019presHighweightcor_no0_newZi
+```
+
+```{r}
+#| message: false
+dat_full <- left_join(dat, env_dat, by = c("month_year", "lon", "lat")) |> 
+  drop_na(temp, salinity, oxy, depth, saduria)
+
+# Plot final sample size
+nrow(dat_full)
+
+# Save data
+write_csv(dat_full, paste0(home, "/data/clean/stomachs.csv"))
+```

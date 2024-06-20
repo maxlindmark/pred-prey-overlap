@@ -1,0 +1,361 @@
+---
+title: "Fit stomach content models"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format: 
+  html:
+    page-layout: full
+    embed-resources: true
+knitr: 
+  opts_chunk:
+    fig.align: center
+    out-width: 80%
+editor: source
+execute: 
+  echo: true
+  eval: true
+  cache: false
+---
+
+## Load libraries
+
+```{r libs}
+#| message: false
+#| warning: false
+#| cache: false
+
+library(tidyverse)
+library(devtools)
+library(sdmTMB)
+library(sdmTMBextra)
+library(tidylog)
+library(viridis)
+library(egg)
+
+devtools::source_url("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/R/functions/map-plot.R")
+
+# Set path
+home <- here::here()
+
+set.seed(99) 
+```
+
+```{r load cache}
+# To load entire cache in interactive r session, do: 
+# qwraps2::lazyload_cache_dir(path = paste0(home, "/R/main-analysis/02-fit-diet-models_cache/html"))
+```
+
+## Read cleaned data
+
+```{r}
+#| message: false
+#| warning: false
+ 
+# We want to scale oxygen, temperature, depth and salinity using the means of the catch data
+catch <- read_csv(paste0(home, "/data/clean/catch_clean.csv")) |> drop_na(depth, oxy, salinity, temp)
+
+d <- read_csv(paste0(home, "/data/clean/stomachs.csv")) |>
+  mutate(year_f = as.factor(year),
+         month_f = as.factor(month),
+         oxy_sc = (oxy - mean(catch$oxy)) / sd(catch$oxy),
+         temp_sc = (temp - mean(catch$temp)) / sd(catch$temp),
+         depth_sc = (depth - mean(catch$depth)) / sd(catch$depth),
+         salinity_sc = (salinity - mean(catch$salinity)) / sd(catch$salinity)) |> 
+  mutate(across(.cols = c("saduria", "biomass_spr", "biomass_her", "pred_length"),
+                .fns = scale,
+                .names = "{.col}_sc")) |> 
+  mutate(fr_her_root = fr_her^(1/2),
+         fr_sad_root = fr_sad^(1/2),
+         fr_spr_root = fr_spr^(1/3))
+```
+
+## Set up a mesh
+
+```{r}
+#| message: false
+#| warning: false
+
+mesh <- make_mesh(d, c("X", "Y"), cutoff = 6)
+
+ggplot() +
+  inlabru::gg(mesh$mesh) +
+  coord_fixed() +
+  geom_point(aes(X, Y), data = d, alpha = 0.2, size = 0.5) +
+  annotate("text", -Inf, Inf, label = paste("n knots = ", mesh$mesh$n), hjust = -0.3, vjust = 3) + 
+  labs(x = "Easting (km)", y = "Northing (km)")
+
+ggsave(paste0(home, "/figures/supp/diet_mesh.pdf"), width = 14, height = 14, units = "cm")
+```
+
+## Fit models
+
+Sprat
+
+```{r}
+mspr1 <- sdmTMB(
+  fr_spr_root ~ 0 + depth_sc + breakpt(biomass_spr_sc) + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "IID",
+  family = delta_gamma(type = "poisson-link"))
+
+sanity(mspr1)
+mspr1
+
+mspr2 <- sdmTMB(
+  fr_spr_root ~ 0 + depth_sc + biomass_spr_sc + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "IID",
+  family = delta_gamma(type = "poisson-link"))
+
+sanity(mspr2)
+mspr2
+
+mspr3 <- sdmTMB(
+  fr_spr_root ~ 0 + depth_sc + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "IID",
+  family = delta_gamma(type = "poisson-link"))
+
+sanity(mspr3)
+mspr3
+
+AIC(mspr1, mspr2, mspr3)
+
+AIC(mspr1, mspr2, mspr3) |> 
+  rownames_to_column() |> 
+  dplyr::select(-df) |> 
+  mutate(min_AIC = min(AIC),
+         delta_AIC = AIC - min_AIC) |>
+  dplyr::select(delta_AIC, rowname) |> 
+  pivot_wider(values_from = delta_AIC, names_from = rowname)
+
+tidy(mspr1, conf.int = TRUE, model = 1, exponentiate = TRUE)
+tidy(mspr1, conf.int = TRUE, model = 2, exponentiate = TRUE)
+
+saveRDS(mspr1, paste0(home, "/output/mspr.rds"))
+```
+
+Herring
+
+```{r}
+mher1 <- sdmTMB(
+  fr_her_root ~ 0 + depth_sc + breakpt(biomass_her_sc) + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "IID",
+  family = delta_gamma(type = "poisson-link"))
+
+sanity(mher1)
+mher1
+
+mher2 <- sdmTMB(
+  fr_her_root ~ 0 + depth_sc + biomass_her_sc + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "IID",
+  family = delta_gamma(type = "poisson-link"))
+
+sanity(mher2)
+mher2
+
+mher3 <- sdmTMB(
+  fr_her_root ~ 0 + depth_sc + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "IID",
+  family = delta_gamma(type = "poisson-link"))
+
+sanity(mher3)
+mher3
+
+AIC(mher1, mher2, mher3)
+
+AIC(mher1, mher2, mher3) |> 
+  rownames_to_column() |> 
+  dplyr::select(-df) |> 
+  mutate(min_AIC = min(AIC),
+         delta_AIC = AIC - min_AIC) |>
+  dplyr::select(delta_AIC, rowname) |> 
+  pivot_wider(values_from = delta_AIC, names_from = rowname)
+
+saveRDS(mher3, paste0(home, "/output/mher.rds"))
+```
+
+Saduria
+
+```{r}
+msad1 <- sdmTMB(
+  fr_sad_root ~ 0 + depth_sc + breakpt(saduria_sc) + pred_length_sc + (1|month_f),
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "IID",
+  family = delta_gamma(type = "poisson-link"))
+
+sanity(msad1)
+msad1
+
+msad2 <- sdmTMB(
+  fr_sad_root ~ 0 + depth_sc + saduria_sc + pred_length_sc + (1|month_f),
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "IID",
+  family = delta_gamma(type = "poisson-link"))
+
+sanity(msad2)
+msad2
+
+msad3 <- sdmTMB(
+  fr_sad_root ~ 0 + depth_sc + pred_length_sc + (1|month_f),
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  spatial = "on",
+  spatiotemporal = "IID",
+  family = delta_gamma(type = "poisson-link"))
+
+sanity(msad3)
+msad3
+
+AIC(msad1, msad2, msad3)
+
+AIC(msad1, msad2, msad3) |> 
+  rownames_to_column() |> 
+  dplyr::select(-df) |> 
+  mutate(min_AIC = min(AIC),
+         delta_AIC = AIC - min_AIC) |>
+  dplyr::select(delta_AIC, rowname) |> 
+  pivot_wider(values_from = delta_AIC, names_from = rowname)
+
+tidy(msad1, conf.int = TRUE, model = 1, exponentiate = TRUE)
+tidy(msad1, conf.int = TRUE, model = 2, exponentiate = TRUE)
+
+saveRDS(msad1, paste0(home, "/output/msad.rds"))
+```
+
+## Residuals
+
+```{r}
+# Sprat
+samps_spr_1 <- sdmTMBextra::predict_mle_mcmc(mspr3, mcmc_iter = 201, mcmc_warmup = 200, model = 1)
+samps_spr_2 <- sdmTMBextra::predict_mle_mcmc(mspr3, mcmc_iter = 201, mcmc_warmup = 200, model = 2)
+
+d$mcmc_res_spr1 <- as.vector(residuals(mspr3, type = "mle-mcmc", mcmc_samples = samps_spr_1, model = 1))
+d$mcmc_res_spr2 <- as.vector(residuals(mspr3, type = "mle-mcmc", mcmc_samples = samps_spr_2, model = 2))
+
+# Herring
+samps_her_1 <- sdmTMBextra::predict_mle_mcmc(mher3, mcmc_iter = 201, mcmc_warmup = 200, model = 1)
+samps_her_2 <- sdmTMBextra::predict_mle_mcmc(mher3, mcmc_iter = 201, mcmc_warmup = 200, model = 2)
+
+d$mcmc_res_her1 <- as.vector(residuals(mher3, type = "mle-mcmc", mcmc_samples = samps_her_1, model = 1))
+d$mcmc_res_her2 <- as.vector(residuals(mher3, type = "mle-mcmc", mcmc_samples = samps_her_2, model = 2))
+
+# Saduria
+samps_sad_1 <- sdmTMBextra::predict_mle_mcmc(msad1, mcmc_iter = 201, mcmc_warmup = 200, model = 1)
+samps_sad_2 <- sdmTMBextra::predict_mle_mcmc(msad1, mcmc_iter = 201, mcmc_warmup = 200, model = 2)
+
+d$mcmc_res_sad1 <- as.vector(residuals(msad1, type = "mle-mcmc", mcmc_samples = samps_sad_1, model = 1))
+d$mcmc_res_sad2 <- as.vector(residuals(msad1, type = "mle-mcmc", mcmc_samples = samps_sad_2, model = 2))
+
+# FIXME: write_csv doesn't work with attributes after scaling?!
+write.csv(d, paste0(home, "/output/diet_residuals.csv"))
+```
+
+```{r}
+# 3 species x 2 models, reorganize data
+res <- read_csv(paste0(home, "/output/diet_residuals.csv"))
+
+res |>
+  pivot_longer(c(mcmc_res_spr1, mcmc_res_spr2,
+                 mcmc_res_her1, mcmc_res_her2,
+                 mcmc_res_sad1, mcmc_res_sad2)) |>
+  mutate(species = "Sprat",
+         species = ifelse(name %in% c("mcmc_res_her1", "mcmc_res_her2"), "Herring", species),
+         species = ifelse(name %in% c("mcmc_res_sad1", "mcmc_res_sad2"), "Saduria", species),
+         model = ifelse(name %in% c("mcmc_res_spr1", "mcmc_res_her1", "mcmc_res_sad1"),
+                        "Binomial", "Gamma")) |> 
+  ggplot(aes(sample = value)) +
+  stat_qq(size = 0.75, shape = 21, fill = NA) +
+  stat_qq_line() +
+  facet_grid(model~species) +
+  labs(y = "Sample Quantiles", x = "Theoretical Quantiles") +
+  theme(aspect.ratio = 1)
+
+ggsave(paste0(home, "/figures/supp/qq_diet.pdf"), width = 17, height = 11, units = "cm")
+```
+
+
+```{r}
+# Conditional of saduria biomass
+nd_sad <- tibble(depth_sc = 0, pred_length_sc = 0, year = 2019L, X = mean(d$X), Y = mean(d$Y),
+                 month_f = as.factor(11),
+                 saduria_sc = seq(quantile(d$saduria_sc, 0.05), quantile(d$saduria_sc, 0.95),
+                                  length.out = 30))
+
+psad <- predict(msad1, newdata = nd_sad, re_form = NULL, re_form_iid = NULL, se_fit = TRUE)
+
+# FIXME: why does this return both models?
+#t1 <- predict(msad1, newdata = nd, re_form = NULL, re_form_iid = NULL, se_fit = TRUE, model = 1)
+
+# Conditional of sprat biomass
+nd_spr <- tibble(depth_sc = 0, pred_length_sc = 0, year = 2019L, X = mean(d$X), Y = mean(d$Y),
+                 month_f = as.factor(11),
+                 biomass_spr_sc = seq(quantile(d$biomass_spr_sc, 0.05, na.rm = TRUE),
+                                      quantile(d$biomass_spr_sc, 0.95, na.rm = TRUE),
+                                      length.out = 30))
+
+pspr <- predict(mspr1, newdata = nd_spr, re_form = NULL, re_form_iid = NULL, se_fit = TRUE)
+
+pdat <- bind_rows(psad |> rename(`Scaled prey density` = saduria_sc) |> mutate(Prey = "Saduria"),
+                  pspr |> rename(`Scaled prey density` = biomass_spr_sc) |> mutate(Prey = "Sprat"))
+
+p1 <- ggplot(pdat, aes(`Scaled prey density`, exp(est))) +
+  geom_ribbon(aes(ymin = exp(est - 1.96*est_se), ymax = exp(est + 1.96*est_se)), alpha = 0.3) +
+  geom_line() +
+  facet_wrap(~Prey) +
+  labs(y = "Relative prey weight") + 
+  NULL
+
+tag_facet(p1, fontface = 1, col = "gray30", size = 3)
+
+ggsave(paste0(home, "/figures/supp/conditional_prey.pdf"), width = 18, height = 9, units = "cm")
+```
+
+
+
