@@ -59,6 +59,7 @@ data/covariates/
 data/shapefiles/
 data/cpue-standardization/
 data/datras/
+data/clean/
 data/Mean depth natural colour (with land).nc
 
 # Reports
@@ -71,6 +72,10 @@ output/
 
 # Decktape
 decktape/
+test_INLA.R
+
+# random stuff
+ecog12909-sup-0001-appendixs1.docx
 
 # Data
 # Old exploratory stuff
