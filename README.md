@@ -1,7 +1,6 @@
-# Materials for the CINEA SC10 report "Study on stomach content of fish to update databases and analyse possible changes in diet or food web interactions"
+# Weak effects of local prey density and spatial overlap on predation intensity in a marine ecosystem
 
-This repository contains all the materials needed to reproduce the results for the Baltic Sea case study.
-
+This repository contains all the materials needed to reproduce the results for this manuscript in prep
 
 ## Setup
 
