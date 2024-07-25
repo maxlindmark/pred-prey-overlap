@@ -1,11 +1,11 @@
-get_annual_predation <- function(.data, threshold, power, prey_name) {
+get_annual_predation <- function(.data, threshold = 1, power, prey_name, area = 9) {
   
   .data |> 
-    bind_cols(pred_grid) |> 
     pivot_longer(cols = starts_with("V"), names_to = "sim") |> 
     dplyr::select(X, Y, year, value, sim) |> 
     mutate(value = (exp(value))^power) |> 
-    left_join(pred_grid_density |> dplyr::select(-saduria, -biomass_spr, -biomass_her),
+    left_join(pred_grid_density_sub |>
+                dplyr::select(-saduria, -biomass_spr, -biomass_her),
               by = c("X", "Y", "year", "sim")) |> 
     drop_na(sim_density) |> # These are dropped in the density models and therefore get NA after left_joining
     filter(value < threshold) |> 
@@ -17,10 +17,12 @@ get_annual_predation <- function(.data, threshold, power, prey_name) {
     left_join(pred_dens, by = c("year", "sim")) |>
     mutate(cap = pred / cod_biomass) |>
     # Summarise sim + year specific predation by year (to get variation across sims)
-    summarise(pred_mean = mean(pred),
-              pred_sd = sd(pred),
-              cap_mean = mean(cap),
-              cap_sd = sd(cap),
+    summarise(pred_median = quantile(pred, probs = 0.5),
+              pred_lwr = quantile(pred, probs = 0.1),
+              pred_upr = quantile(pred, probs = 0.9),
+              cap_median = quantile(cap, probs = 0.5),
+              cap_lwr = quantile(cap, probs = 0.1),
+              cap_upr = quantile(cap, probs = 0.9),
               .by = year) |>
     mutate(species = prey_name)
   
