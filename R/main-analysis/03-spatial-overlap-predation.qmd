@@ -372,7 +372,7 @@ annotations <- data.frame(
   vjust = c(-20, 1.5)
 )
 
-# Max predation by species (because I trim the plot)
+# Max predation by species (in case trim the plot)
 spatial_pred |>
   summarise(max = max(pred_mean), .by = species)
 
