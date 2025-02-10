@@ -68,4 +68,8 @@ ecog12909-sup-0001-appendixs1.docx
 figures/supp/cpue_oxygen_rasters/
 # Meetings
 meetings/
-! comments_ML.docx
+comments_ML.docx
+*/sms_gadget_comp/
+*/scrap_test.R
+R/supp-analysis/02-fit-diet-models-q4.qmd
+R/supp-analysis/bivariate-dens-diet.qmd

@@ -1,4 +1,4 @@
-# Weak effects of local prey density and spatial overlap on predation intensity in a marine ecosystem
+# Weak effects of local prey density and spatial overlap on predation intensity in a temperate marine ecosystem
 
 This repository contains all the materials needed to reproduce the results for this manuscript in prep
 
