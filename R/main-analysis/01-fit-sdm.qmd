@@ -41,11 +41,6 @@ devtools::source_url("https://raw.githubusercontent.com/maxlindmark/pred-prey-ov
 home <- here::here()
 ```
 
-```{r load cache}
-# To load entire cache in interactive r session, do: 
-# qwraps2::lazyload_cache_dir(path = paste0(home, "/R/main-analysis/01-fit-sdm_cache/html"))
-```
-
 ## Read and scale data
 
 ```{r read biomass data}
@@ -53,123 +48,82 @@ home <- here::here()
 #| message: false
 
 # Read & scale data
-d <- read_csv(paste0(home, "/data/clean/catch_clean.csv")) |> 
-  rename(X = x, Y = y) |> 
-  drop_na(depth, oxy, salinity, temp) |> 
-  mutate(year_f = as.factor(year),
-         quarter_f = as.factor(quarter),
-         month_f = as.factor(month)) |> 
-  mutate(across(.cols = c("temp", "salinity", "oxy", "depth"),
-                .fns = scale,
-                .names = "{.col}_sc")) |> 
-  mutate(temp_sq = temp_sc^2,
-         oxy_sq = oxy_sc^2,
-         depth_sq = depth_sc^2,)
+d <- read_csv(paste0(home, "/data/clean/catch_clean.csv")) |>
+  drop_na(depth, oxy, salinity, temp) |>
+  mutate(
+    year_f = as.factor(year),
+    quarter_f = as.factor(quarter),
+    month_f = as.factor(month)
+  ) |>
+  mutate(across(
+    .cols = c("temp", "salinity", "oxy", "depth"),
+    .fns = scale,
+    .names = "{.col}_sc"
+  )) |>
+  mutate(
+    temp_sq = temp_sc^2,
+    oxy_sq = oxy_sc^2,
+    depth_sq = depth_sc^2,
+  )
 ```
 
 ## Create mesh
 
 ```{r}
 #| cache: false
+
 mesh <- make_mesh(d,
-                  xy_cols = c("X", "Y"),
-                  cutoff = 15)
+  xy_cols = c("X", "Y"),
+  cutoff = 10
+)
 
 ggplot() +
   inlabru::gg(mesh$mesh) +
   coord_fixed() +
   geom_point(aes(X, Y), data = d, alpha = 0.2, size = 0.5) +
-  annotate("text", -Inf, Inf, label = paste("n knots = ", mesh$mesh$n), hjust = -0.3, vjust = 3) + 
+  annotate("text", -Inf, Inf, label = paste("n knots = ", mesh$mesh$n), hjust = -0.3, vjust = 3) +
   labs(x = "Easting (km)", y = "Northing (km)")
 
 ggsave(paste0(home, "/figures/supp/density_mesh.pdf"), width = 14, height = 14, units = "cm")
 ```
 
-## Classic delta/hurdle model
+## Poisson link model
 
-```{r com cod delta}
+```{r model}
 tic()
-mcod <- sdmTMB(cod_com ~ 0 + year_f + quarter_f + salinity_sc + temp_sc + temp_sq + depth_sc + depth_sq + breakpt(oxy_sc),
-               data = d,
-               mesh = mesh,
-               family = delta_gamma(link1 = "logit", link2 = "log"),
-               spatiotemporal = "IID",
-               spatial = "off",
-               spatial_varying = ~0 + quarter_f,
-               time = "year")
+mcod <- sdmTMB(density ~ 0 + year_f + quarter_f + salinity_sc + temp_sc + temp_sq + breakpt(oxy_sc),
+  data = d,
+  mesh = mesh,
+  family = delta_gamma(type = "poisson-link"),
+  time_varying = ~ 0 + depth_sc + depth_sq,
+  time_varying_type = "rw0",
+  spatiotemporal = "iid",
+  spatial = "off",
+  spatial_varying = ~ 0 + quarter_f,
+  time = "year"
+)
 toc()
+
 sanity(mcod)
 summary(mcod) # check the range in relation to cutoff!
 ```
 
 Residuals
 
-```{r residuals com}
-tic()
-samps1 <- sdmTMBextra::predict_mle_mcmc(mcod, mcmc_iter = 201, mcmc_warmup = 200, model = 1)
-samps2 <- sdmTMBextra::predict_mle_mcmc(mcod, mcmc_iter = 201, mcmc_warmup = 200, model = 2)
+```{r residuals}
+res <- simulate(mcod, nsim = 400, type = "mle-mvn") |>
+  dharma_residuals(mcod)
 
-d$mcmc_res1 <- as.vector(residuals(mcod, type = "mle-mcmc", mcmc_samples = samps1, model = 1))
-d$mcmc_res2 <- as.vector(residuals(mcod, type = "mle-mcmc", mcmc_samples = samps2, model = 2))
-toc() 
+ggplot(res, aes(observed, expected)) +
+  geom_point(color = "grey30", shape = 21) +
+  geom_abline(col = "tomato3", linewidth = 1.2) +
+  theme(aspect.ratio = 1) +
+  labs(x = "Observed", y = "Expected")
 
-d |>
-  rename(Binomial = mcmc_res1,
-         Gamma = mcmc_res2) |> 
-  pivot_longer(c(Binomial, Gamma)) |> 
-  ggplot(aes(sample = value)) +
-  stat_qq(size = 0.75, shape = 21, fill = NA) +
-  stat_qq_line() +
-  facet_wrap(~name) + 
-  labs(y = "Sample Quantiles", x = "Theoretical Quantiles") +
-  theme(aspect.ratio = 1)
-
-ggsave(paste0(home, "/figures/supp/qq_cod_sdm.pdf"), width = 17, height = 11, units = "cm")
-```
-
-## Poisson link model
-
-```{r}
-tic()
-mcodpl <- sdmTMB(cod_com ~ 0 + year_f + quarter_f + salinity_sc + temp_sc + temp_sq + depth_sc + depth_sq + breakpt(oxy_sc),
-                 data = d,
-                 mesh = mesh,
-                 family = delta_gamma(type = "poisson-link"),
-                 spatiotemporal = "IID",
-                 spatial = "off",
-                 spatial_varying = ~0 + quarter_f,
-                 time = "year")
-toc()
-sanity(mcodpl)
-summary(mcodpl) # check the range in relation to cutoff!
-```
-
-Residuals
-
-```{r residuals pl com}
-# tic()
-# samps1_pl <- sdmTMBextra::predict_mle_mcmc(mcodpl, mcmc_iter = 201, mcmc_warmup = 200, model = 1)
-# samps2_pl <- sdmTMBextra::predict_mle_mcmc(mcodpl, mcmc_iter = 201, mcmc_warmup = 200, model = 2)
-# 
-# d$mcmc_res1_pl <- as.vector(residuals(mcodpl, type = "mle-mcmc", mcmc_samples = samps1_pl, model = 1))
-# d$mcmc_res2_pl <- as.vector(residuals(mcodpl, type = "mle-mcmc", mcmc_samples = samps2_pl, model = 2))
-# toc()
-# 
-# d |>
-#   rename(Binomial = mcmc_res1_pl,
-#          Gamma = mcmc_res2_pl) |> 
-#   pivot_longer(c(Binomial, Gamma)) |> 
-#   ggplot(aes(sample = value)) +
-#   stat_qq(size = 0.75, shape = 21, fill = NA) +
-#   stat_qq_line() +
-#   facet_wrap(~name) + 
-#   labs(y = "Sample Quantiles", x = "Theoretical Quantiles") +
-#   theme(aspect.ratio = 1)
-
-#ggsave(paste0(home, "/figures/supp/qq_cod_sdm_pl.pdf"), width = 17, height = 11, units = "cm")
+ggsave(paste0(home, "/figures/supp/qq_cod_sdm.pdf"), width = 11, height = 11, units = "cm")
 ```
 
 ```{r}
-# save model object:
+# Save model object:
 saveRDS(mcod, paste0(home, "/output/mcod.rds"))
 ```
