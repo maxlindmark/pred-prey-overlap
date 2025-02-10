@@ -120,25 +120,6 @@ mspr <- readRDS(paste0(home, "/output/mspr.rds"))
 msad <- readRDS(paste0(home, "/output/msad.rds"))
 ```
 
-TEST
-
-```{r}
-# Test predict sad: is it the saduria variable that does it?
-# p <- predict(msad, newdata = pred_grid |> mutate(saduria_sc = 0))
-# 
-# ggplot(p |> filter(year == 1994), aes(X, Y, fill = exp(est1 + est2))) +
-#   geom_raster() +
-#   coord_sf() +
-#   scale_fill_viridis(option = "A", trans = "sqrt")
-# 
-# p2 <- predict(msad, newdata = pred_grid)
-# 
-# ggplot(p2 |> filter(year == 1994), aes(X, Y, fill = exp(est1 + est2))) +
-#   geom_raster() +
-#   coord_sf() +
-#   scale_fill_viridis(option = "A", trans = "sqrt")
-```
-
 ## Predict with sims from density and diet models to propagate uncertainty
 
 ```{r}
