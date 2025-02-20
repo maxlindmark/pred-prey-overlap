@@ -69,6 +69,46 @@ d <- read_csv(paste0(home, "/data/clean/stomachs.csv")) |>
   filter(rpw_her < 0.5)
 ```
 
+Extra test plot
+
+```{r}
+d |> 
+  summarise(rpw_her = mean(rpw_her), .by = pred_length) |> 
+  ggplot(aes(pred_length, rpw_her)) + 
+  geom_point() +
+  geom_smooth()
+
+t <- d |> 
+  filter(pred_length > 4)
+
+min(d$pred_length)
+
+# Distribution of data and cod sizes
+d |> 
+  rename(Sprat = rpw_spr,
+         Herring = rpw_her,
+         Saduria = rpw_sad) |> 
+  pivot_longer(c(Sprat, Herring, Saduria)) |> 
+  ggplot(aes(value)) + 
+  geom_histogram(fill = "grey40") +
+  scale_x_continuous(trans = "sqrt") +
+  scale_y_continuous(trans = "sqrt") +
+  coord_cartesian(expand = 0) + 
+  labs(x = "Relative prey weight") +
+  facet_wrap(~name)
+
+ggsave(paste0(home, "/figures/supp/rpw_dist.pdf"), width = 14, height = 7, units = "cm")
+
+d |> 
+  ggplot(aes(pred_length)) + 
+  geom_histogram(fill = "grey40") +
+  coord_cartesian(expand = 0) + 
+  labs(x = "Predator length (cm)")
+
+ggsave(paste0(home, "/figures/supp/cod_size_dist.pdf"), width = 7, height = 7, units = "cm")
+```
+
+
 ## Set up a mesh
 
 ```{r}
