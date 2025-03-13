@@ -108,7 +108,6 @@ d |>
 ggsave(paste0(home, "/figures/supp/cod_size_dist.pdf"), width = 7, height = 7, units = "cm")
 ```
 
-
 ## Set up a mesh
 
 ```{r}
@@ -121,7 +120,6 @@ ggplot() +
   inlabru::gg(mesh$mesh) +
   coord_fixed() +
   geom_point(aes(X, Y), data = d, alpha = 0.2, size = 0.5) +
-  annotate("text", -Inf, Inf, label = paste("n knots = ", mesh$mesh$n), hjust = -0.3, vjust = 3) +
   labs(x = "Easting (km)", y = "Northing (km)")
 
 ggsave(paste0(home, "/figures/supp/diet_mesh.pdf"), width = 14, height = 14, units = "cm")
@@ -195,8 +193,9 @@ AIC(mspr1, mspr2, mspr3) |>
   dplyr::select(delta_AIC, rowname) |>
   pivot_wider(values_from = delta_AIC, names_from = rowname)
 
-# tidy(mspr1, conf.int = TRUE, model = 1, exponentiate = TRUE)
-# tidy(mspr1, conf.int = TRUE, model = 2, exponentiate = TRUE)
+
+tidy(mspr3, exponentiate = TRUE)
+tidy(mspr3, conf.int = TRUE, effects = "ran_pars")
 
 saveRDS(mspr3, paste0(home, "/output/mspr.rds"))
 ```
@@ -265,6 +264,9 @@ AIC(mher1, mher2, mher3) |>
   ) |>
   dplyr::select(delta_AIC, rowname) |>
   pivot_wider(values_from = delta_AIC, names_from = rowname)
+
+tidy(mher3, exponentiate = TRUE)
+tidy(mher3, conf.int = TRUE, effects = "ran_pars")
 
 saveRDS(mher3, paste0(home, "/output/mher.rds"))
 ```
@@ -335,6 +337,12 @@ AIC(msad1, msad2, msad3) |>
   dplyr::select(delta_AIC, rowname) |>
   pivot_wider(values_from = delta_AIC, names_from = rowname)
 
+tidy(msad1, exponentiate = TRUE, model = 1)
+tidy(msad1, conf.int = TRUE, effects = "ran_pars", model = 1)
+
+tidy(msad1, exponentiate = TRUE, model = 2)
+tidy(msad1, conf.int = TRUE, effects = "ran_pars", model = 2)
+
 saveRDS(msad1, paste0(home, "/output/msad.rds"))
 ```
 
@@ -400,7 +408,7 @@ sad_sims_sum <- sad_sims |>
             .by = saduria_sc)
 
 sad_sims_sum |> 
-  ggplot(aes(saduria_sc,median)) +
+  ggplot(aes(saduria_sc, median)) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.3) +
   # geom_line(data = sad_sims |> filter(sim %in% sample(levels(sim), 30)),
   #           aes(saduria_sc, value, group = sim),

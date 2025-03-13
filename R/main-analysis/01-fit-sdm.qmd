@@ -32,6 +32,7 @@ library(sdmTMBextra)
 library(tictoc)
 library(tidylog)
 library(sdmTMB)
+library(ggtext)
 
 # Source code for map plots
 # You need: # devtools::install_github("seananderson/ggsidekick") # not on CRAN; library(ggsidekick)
@@ -81,7 +82,7 @@ ggplot() +
   inlabru::gg(mesh$mesh) +
   coord_fixed() +
   geom_point(aes(X, Y), data = d, alpha = 0.2, size = 0.5) +
-  annotate("text", -Inf, Inf, label = paste("n knots = ", mesh$mesh$n), hjust = -0.3, vjust = 3) +
+  #annotate("text", -Inf, Inf, label = paste("n knots = ", mesh$mesh$n), hjust = -0.3, vjust = 3) +
   labs(x = "Easting (km)", y = "Northing (km)")
 
 ggsave(paste0(home, "/figures/supp/density_mesh.pdf"), width = 14, height = 14, units = "cm")
@@ -90,8 +91,12 @@ ggsave(paste0(home, "/figures/supp/density_mesh.pdf"), width = 14, height = 14, 
 ## Poisson link model
 
 ```{r model}
+ggplot(d, aes(depth_sc, density)) +
+  geom_point() +
+  geom_smooth()
+
 tic()
-mcod <- sdmTMB(density ~ 0 + year_f + quarter_f + salinity_sc + temp_sc + temp_sq + breakpt(oxy_sc),
+mcod <- sdmTMB(density ~ 0 + year_f + depth_sc + depth_sq + quarter_f + salinity_sc + temp_sc + temp_sq + breakpt(oxy_sc),
   data = d,
   mesh = mesh,
   family = delta_gamma(type = "poisson-link"),
@@ -104,8 +109,64 @@ mcod <- sdmTMB(density ~ 0 + year_f + quarter_f + salinity_sc + temp_sc + temp_s
 )
 toc()
 
+mcod # Range looks good
 sanity(mcod)
-summary(mcod) # check the range in relation to cutoff!
+```
+
+Conditional effect of depth
+
+```{r}
+nd <- expand.grid(
+  depth = seq(min(d$depth),
+              max(d$depth),
+              length.out = 50
+              ),
+  year = unique(d$year) # all years
+) |> 
+  mutate(year_f = as.factor(year),
+         depth_sc = (depth - mean(d$depth)) / sd(d$depth),
+         depth_sq = depth_sc^2,
+         quarter_f = as.factor(4),
+         salinity_sc = 0,
+         temp_sc = 0,
+         temp_sq = 0,
+         oxy_sc = 0)
+
+# Too slow for SE fit... use sims instead
+cod_sims <- predict(mcod,
+                    newdata = nd,
+                    re_form = NA,
+                    nsim = 500) |>
+  as.data.frame() |> 
+  bind_cols(nd) |> 
+  pivot_longer(cols = starts_with("V"), names_to = "sim") |> 
+  mutate(sim = as.factor(sim))
+
+sims_sum <- cod_sims |> 
+  summarise(median = median(value),
+            upr = quantile(value, 0.9),
+            lwr = quantile(value, 0.1),
+            .by = c(depth, year))
+
+sims_sum |> 
+  ggplot(aes(depth, exp(median), ymin = exp(lwr), ymax = exp(upr), 
+             color = year, fill = year, group = year)) +
+  geom_ribbon(alpha = 0.15, color = NA) +
+  
+  scale_color_viridis(option = "E", name = "Year") +
+  scale_fill_viridis(option = "E") +
+  geom_line() + 
+  guides(fill = "none", color = guide_colorbar(position = "inside")) +
+  labs(
+    y = "Cod biomass density (kg/km<sup>2</sup>)",
+    x = "Depth (m)"
+  ) +
+  coord_cartesian(expand = 0) +
+  theme(axis.title.y = element_markdown(),
+        legend.position.inside = c(0.9, 0.83)) +
+  NULL
+
+ggsave(paste0(home, "/figures/supp/tw_depth.pdf"), width = 11, height = 11, units = "cm")
 ```
 
 Residuals
