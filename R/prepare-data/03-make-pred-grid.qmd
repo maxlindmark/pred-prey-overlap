@@ -54,8 +54,7 @@ Read data and depth-raster
 #| message: false
 
 # Read data
-d <- readr::read_csv("https://raw.githubusercontent.com/maxlindmark/spatial-metabolic-index/main/data/clean/catch_clean.csv") |>
-  rename(X = x, Y = y)
+d <- read_csv(paste0(home, "/data/clean/catch_clean.csv"))
 ```
 
 ## Make the grid with depth
@@ -141,22 +140,6 @@ ggplot(pred_grid, aes(lon, lat, color = depth * -1)) +
 pred_grid$depth <- pred_grid$depth * -1
 
 pred_grid <- pred_grid |> drop_na(depth)
-
-pred_grid |>
-  filter(year == 1999) |>
-  drop_na(depth) |>
-  # mutate(water = ifelse(depth < 0.00000001, "N", "Y")) |>
-  ggplot(aes(X * 1000, Y * 1000, fill = depth)) +
-  geom_raster() +
-  NULL
-
-plot_map +
-  geom_point(data = pred_grid, aes(X * 1000, Y * 1000), size = 0.001) +
-  geom_sf()
-
-plot_map +
-  geom_raster(data = filter(pred_grid, year == 1999), aes(X * 1000, Y * 1000, fill = depth), size = 0.001) +
-  geom_sf()
 ```
 
 Add month_year variable for matching with raster layers
@@ -164,9 +147,10 @@ Add month_year variable for matching with raster layers
 ```{r merge quarters}
 #| message: false
 
-dat <- replicate_df(pred_grid, "quarter", c(1, 4)) |>
+dat <- pred_grid |> #replicate_df(pred_grid, "quarter", c(1, 4)) |>
   mutate(
-    month = ifelse(quarter == 1, 2, 11), # most common months
+    #month = ifelse(quarter == 1, 2, 11), # most common months
+    month = 11, # most common months
     month_year = paste(month, year, sep = "_")
   )
 ```
@@ -469,7 +453,7 @@ d_st <- bind_rows(st_list)
 #| message: false
 
 env_dat <- d_st |>
-  left_join(d_oxy |> dplyr::select(-X, -Y, -depth, -quarter, -year, -month),
+  left_join(d_oxy |> dplyr::select(-X, -Y, -depth, -year, -month),
     by = c("month_year", "lon", "lat")
   ) |>
   dplyr::select(month_year, lon, lat, temp, salinity, oxy)
@@ -488,7 +472,6 @@ dat_full <- left_join(dat, env_dat, by = c("month_year", "lon", "lat")) |>
 ```{r save}
 #| message: false
 
-# Remove variables and save
 pred_grid_93_08 <- dat_full |> filter(year <= 2008)
 pred_grid_09_23 <- dat_full |> filter(year >= 2009)
 

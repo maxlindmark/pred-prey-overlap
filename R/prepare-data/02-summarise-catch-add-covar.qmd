@@ -128,6 +128,11 @@ oxy_tibble <- bind_rows(oxy_tibble, oxy_tibble_new)
 # Loop through all year combos, extract the temperatures at the data locations
 oxy_list <- list()
 
+#unique(oxy_tibble$day)
+# oxy_tibble |> 
+#   summarise(n = n(), .by = c(longitude, latitude, month_year)) |> 
+#   distinct(n)
+  
 for (i in unique(dat$month_year)) {
   d_sub <- filter(dat, month_year == i)
   oxy_tibble_sub <- filter(oxy_tibble, month_year == i)
