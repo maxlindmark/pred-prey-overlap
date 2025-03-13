@@ -1,0 +1,1214 @@
+---
+title: "Calculate predation and spatial overlap with prey"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format: 
+  html:
+    page-layout: full
+    embed-resources: true
+knitr: 
+  opts_chunk:
+    fig.align: center
+    out.width: "100%"
+editor: source
+execute: 
+  echo: true
+  eval: true
+  cache: false
+---
+
+
+## Load packages & source functions
+
+
+```{r libraries}
+#| cache: false
+#| message: false
+#| warning: false
+#| code-fold: true
+
+library(sdmTMB)
+library(tidyverse)
+library(tidyverse)
+library(viridis)
+library(devtools)
+library(terra)
+#library(tidylog)
+library(RColorBrewer)
+library(patchwork)
+library(egg)
+library(ggpmisc)
+library(ggh4x)
+library(ggtext)
+library(tictoc)
+library(brms)
+library(tidybayes)
+library(modelr)
+
+# Set path
+home <- here::here()
+
+# Source functions for overlap, predation and plotting
+for (fun in list.files(paste0(home, "/R/functions"))) {
+  source(paste(home, "R/functions", fun, sep = "/"))
+}
+
+# Palette for plotting
+pal <- brewer.pal(name = "Paired", n = 8)
+
+# 3rd root transformation with ggplot, editing Sean Anderson's code:
+# https://github.com/seananderson/ggsidekick/blob/master/R/trans.R
+third_root_power_trans <- function() {
+  scales::trans_new(
+    name = "third root power",
+    transform = function(x) ifelse(x > 0, x^(1/3), -(-x)^(1/3)),
+    inverse = function(x) ifelse(x > 0, x^3, -(-x)^3),
+    domain = c(-Inf, Inf))
+}
+```
+
+
+## Load prediction grid
+
+
+```{r}
+#| message: false
+
+# Scale environmental variables with respect to catch data, and diet covariates with respect to diet data
+catch <- read_csv(paste0(home, "/data/clean/catch_clean.csv")) |> 
+  drop_na(depth, oxy, salinity, temp)
+
+diet <- read_csv(paste0(home, "/data/clean/stomachs.csv"))
+
+pred_grid <-
+  bind_rows(
+    read_csv(paste0(home, "/data/clean/pred_grid_(1_2).csv")),
+    read_csv(paste0(home, "/data/clean/pred_grid_(2_2).csv"))
+  ) |>
+  mutate(quarter = 4) |> # Not needed in theory for saduria...
+  drop_na(saduria) |>
+  mutate(
+    year_f = as.factor(year),
+    quarter_f = as.factor(quarter),
+    month_f = as.factor(month),
+    oxy_sc = (oxy - mean(catch$oxy)) / sd(catch$oxy),
+    temp_sc = (temp - mean(catch$temp)) / sd(catch$temp),
+    temp_sq = temp_sc^2,
+    depth_sc = (depth - mean(catch$depth)) / sd(catch$depth),
+    depth_sq = depth_sc^2,
+    salinity_sc = (salinity - mean(catch$salinity)) / sd(catch$salinity),
+    pred_length_sc = 0,
+    saduria_sc = (saduria - mean(diet$saduria)) / sd(diet$saduria),
+    biomass_spr_sc = (biomass_spr - mean(diet$biomass_spr)) / sd(diet$biomass_spr)
+  ) |> 
+  filter(depth < 130)
+
+# 99% quantile of depth in catch and stomach data
+quantile(catch$depth, 0.995)
+quantile(diet$depth, 0.995)
+
+# Filter away > 130 m
+# ggplot(pred_grid |>
+#          filter(year == max(year)) |> 
+#          filter(depth < 130),
+#        aes(X, Y, fill = depth)) +
+#   geom_raster()
+```
+
+
+## Load models
+
+
+```{r}
+#| message: false
+
+# Density
+mcod <- readRDS(paste0(home, "/output/mcod.rds"))
+
+# Diet
+mher <- readRDS(paste0(home, "/output/mher.rds"))
+mspr <- readRDS(paste0(home, "/output/mspr.rds"))
+msad <- readRDS(paste0(home, "/output/msad.rds"))
+```
+
+
+## Predict with sims from density and diet models to propagate uncertainty
+
+
+```{r}
+# Predict and then for loop to summarise and avoid having too large pred grids in the memory
+nsim <- 500
+
+sim_dens <- predict(mcod, newdata = pred_grid, nsim = nsim) |> as.data.frame()
+
+sim_her <- predict(mher, newdata = pred_grid, nsim = nsim) |>
+  as.data.frame() |>
+  bind_cols(pred_grid |> dplyr::select(X, Y, year))
+
+sim_spr <- predict(mspr, newdata = pred_grid, nsim = nsim) |>
+  as.data.frame() |>
+  bind_cols(pred_grid |> dplyr::select(X, Y, year))
+
+sim_sad <- predict(msad, newdata = pred_grid, nsim = nsim) |>
+  as.data.frame() |>
+  bind_cols(pred_grid |> dplyr::select(X, Y, year))
+```
+
+
+The density prediction is used later for spatial overlap + it gets left_joined to the other sims, so it gets a special treatment
+
+
+```{r}
+pred_grid_density <- pred_grid |>
+  bind_cols(sim_dens) |>
+  pivot_longer(cols = starts_with("V"), names_to = "sim", values_to = "sim_density") |>
+  dplyr::select(X, Y, year, saduria, biomass_spr, biomass_her, sim_density, sim) |>
+  mutate(sim_density = exp(sim_density)) |>
+  filter(sim_density < quantile(sim_density, 0.9999))
+```
+
+
+## Plot cod density in space for two years
+
+
+```{r}
+pred_dens_space <- pred_grid_density |>
+  filter(year %in% c(1994, 2022)) |>
+  summarise(
+    density_mean = mean(sim_density),
+    .by = c(year, X, Y)
+  )
+
+annotations <- data.frame(
+  xpos = c(-Inf, -Inf),
+  ypos = c(-Inf, Inf),
+  year = c(1994, 2022),
+  hjust = c(-0.3, -0.3),
+  vjust = c(-29.2, 1.5)
+)
+
+# Max density by species (because I trim the plot)
+pred_dens_space |>
+  summarise(max = max(density_mean))
+
+# Plot!
+# viridis(n=3) # high color
+
+plot_map +
+  geom_raster(
+    data = pred_dens_space,
+    aes(X * 1000, Y * 1000, fill = density_mean)
+  ) +
+  geom_sf() +
+  scale_fill_viridis(
+    trans = "sqrt", name = "Cod<br>biomass density<br>(kg/km<sup>2</sup>)",
+    na.value = "#FDE725FF",
+    limits = c(0, quantile(pred_dens_space$density_mean, 0.999))
+  ) +
+  guides(fill = guide_colorbar(position = "inside")) +
+  theme(
+    legend.position.inside = c(0.075, 0.76),
+    legend.key.width = unit(0.2, "cm"),
+    legend.key.height = unit(0.25, "cm"),
+    legend.text = element_text(size = 6.7),
+    legend.direction = "vertical",
+    legend.title = element_markdown(size = 7.5),
+    plot.title = element_text(margin = margin(0, 0, -10, 0))
+  ) +
+  facet_wrap(~year, ncol = 2) +
+  geom_text(
+    data = annotations |> mutate(annotateText = c("(a)", "(b)")), size = 3.2,
+    aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = annotateText)
+  )
+
+ggsave(paste0(home, "/figures/spatial_cod.pdf"), width = 17, height = 9, units = "cm")
+```
+
+
+## Plot annual predation with uncertainty
+
+
+```{r}
+#| message: false
+# Summarise predator biomass by year and sim and join that to calculate per capita predation
+pred_dens <- pred_grid_density |>
+  summarise(
+    cod_biomass = sum(sim_density * 9), # area is 9 km2
+    .by = c(year, sim)
+  )
+
+# Get the predation by year in a loop, else it becomes too long with all the sims, running out of memory...
+herlist <- list()
+sadlist <- list()
+sprlist <- list()
+
+tic()
+for (i in unique(pred_grid$year)) {
+  sim_her_sub <- sim_her |> filter(year == i)
+  sim_sad_sub <- sim_sad |> filter(year == i)
+  sim_spr_sub <- sim_spr |> filter(year == i)
+  pred_grid_density_sub <- pred_grid_density |> filter(year == i)
+
+  herlist[[i]] <- get_annual_predation(sim_her_sub, prey_name = "Herring")
+  sadlist[[i]] <- get_annual_predation(sim_sad_sub, prey_name = "Saduria")
+  sprlist[[i]] <- get_annual_predation(sim_spr_sub, prey_name = "Sprat")
+
+  gc()
+}
+
+tot_pred <- bind_rows(
+  bind_rows(herlist),
+  bind_rows(sadlist),
+  bind_rows(sprlist)
+)
+toc()
+
+# Prepare data for fitting gams and for plotting
+clean_pred <- tot_pred |>
+  mutate(species = as.factor(species))
+
+# Fit gamma-GAMs to annual predation metrics
+m_pop <- brm(
+  pred_median ~ species + s(year, by = species),
+  family = Gamma(link = "log"),
+  control = list(adapt_delta = 0.99),
+  data = clean_pred |> mutate(pred_median = pred_median / 1000))
+
+m_cap <- brm(
+  cap_median ~ species + s(year, by = species),
+  family = Gamma(link = "log"),
+  control = list(adapt_delta = 0.99),
+  data = clean_pred)
+
+pred_pop <- clean_pred |> 
+  group_by(species) |>
+  data_grid(year = seq_range(year, n = 51)) |>
+  add_epred_draws(m_pop) |> 
+  mutate(metric = "Population-level (tonnes)")
+  
+pred_cap <- clean_pred |> 
+  group_by(species) |>
+  data_grid(year = seq_range(year, n = 51)) |>
+  add_epred_draws(m_cap) |> 
+  mutate(metric = "Per capita (kg/kg)")
+
+preds <- bind_rows(pred_pop, pred_cap)
+  
+pop <- clean_pred |>
+  dplyr::select(year, species, pred_median, pred_lwr, pred_upr) |>
+  rename(
+    median = pred_median,
+    lwr = pred_lwr,
+    upr = pred_upr
+  ) |>
+  mutate(
+    median = median / 1000,
+    lwr = lwr / 1000,
+    upr = upr / 1000
+  ) |>
+  mutate(metric = "Population-level (tonnes)")
+
+cap <- clean_pred |>
+  dplyr::select(year, species, cap_median, cap_lwr, cap_upr) |>
+  rename(
+    median = cap_median,
+    lwr = cap_lwr,
+    upr = cap_upr
+  ) |>
+  mutate(metric = "Per capita (kg/kg)")
+
+clean_plot <- bind_rows(pop, cap)
+
+blues <- brewer.pal(n = 4, name = "Blues")
+
+p0 <- ggplot(clean_plot, aes(year, median)) +
+  geom_errorbar(aes(ymin = lwr, ymax = upr),
+    width = 0, color = "grey40", alpha = 0.4,
+    linewidth = 0.55
+  ) +
+  geom_point(color = "grey30", alpha = 0.7, size = 1.3) +
+  theme(
+    aspect.ratio = 6 / 7,
+    strip.text.x.top = element_text(size = 8.2, margin = unit(rep(0.06, 4), "cm")),
+    strip.text.y.left = element_text(size = 8.2, margin = unit(rep(0.06, 4), "cm"))
+  ) +
+  stat_lineribbon(data = preds, 
+                  aes(year, .epred), alpha = 0.25, .width = c(0.5, 0.9), size = 0.75,
+                  color = brewer.pal(n = 3, name = "Blues")[3]) +
+  scale_fill_manual(values = blues[3:4]) +
+  facet_grid2(metric ~ species,
+    switch = "y",
+    scales = "free_y", independent = "y"
+  ) +
+  guides(fill = "none") +
+  labs(x = "Year", y = "Relative predation")
+
+tag_facet(p0, fontface = 1, col = "gray30", size = 3)
+
+ggsave(paste0(home, "/figures/pred_yearly.pdf"), width = 17, height = 9, units = "cm")
+```
+
+
+## Plot weighted predation in space
+
+
+```{r}
+pred_grid_density_sub <- pred_grid_density |> filter(year %in% c(1994, 2022))
+
+tic()
+spatial_pred <- bind_rows(
+  get_spatial_predation(sim_her, years = c(1994, 2022), prey_name = "Herring"),
+  get_spatial_predation(sim_sad, years = c(1994, 2022), prey_name = "Saduria"),
+  get_spatial_predation(sim_spr, years = c(1994, 2022), prey_name = "Sprat")
+)
+toc()
+
+plot_map2 <- plot_map +
+  guides(fill = guide_colorbar(position = "inside")) +
+  theme(
+    legend.position.inside = c(0.16, 0.84),
+    legend.key.width = unit(0.2, "cm"),
+    legend.key.height = unit(0.25, "cm"),
+    legend.text = element_text(size = 7),
+    legend.direction = "vertical",
+    legend.title = element_text(size = 9),
+    plot.title = element_text(hjust = 0.5)
+    #plot.title = element_text(margin = margin(0, 0, -10, 0))
+  )
+
+annotations <- data.frame(
+  xpos = c(-Inf, -Inf),
+  ypos = c(-Inf, Inf),
+  year = c(1994, 2022),
+  hjust = c(-0.3, -0.3),
+  vjust = c(-19.5, 1.5)
+)
+
+# Max predation by species (in case trim the plot)
+spatial_pred |>
+  summarise(max = max(pred_mean), .by = species)
+
+# Plot!
+# viridis(n=3, option = "cividis") # high color
+
+# Herring
+p1 <- plot_map2 +
+  geom_raster(
+    data = spatial_pred |> filter(species == "Herring"),
+    aes(X * 1000, Y * 1000, fill = pred_mean)
+  ) +
+  geom_sf() +
+  scale_fill_viridis(
+    trans = "third_root_power", name = "Predation<br>(kg/km<sup>2</sup>)",
+    option = "cividis",
+    #na.value = "#FFEA46FF",
+    breaks = c(0.1, 1, 3),
+    #limits = c(0, quantile(filter(spatial_pred, species == "Herring")$pred_mean, 0.9999))
+  ) +
+  labs(title = "Herring") +
+  theme(
+    axis.title.x = element_blank(),
+    legend.title = element_markdown(),
+    strip.text.x.top = element_blank()
+  ) +
+  geom_text(
+    data = annotations |> mutate(annotateText = c("(a)", "(d)")), size = 3.2,
+    aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = annotateText)
+  ) +
+  facet_wrap(~year, ncol = 1)
+
+p1
+
+# Saduria
+p2 <- plot_map2 +
+  geom_raster(
+    data = spatial_pred |> filter(species == "Saduria"),
+    aes(X * 1000, Y * 1000, fill = pred_mean)
+  ) +
+  geom_sf() +
+  scale_fill_viridis(
+    trans = "third_root_power",
+    name = "<br> ",
+    option = "cividis",
+    #na.value = "#FFEA46FF",
+    breaks = c(1, 15, 50),
+    #limits = c(0, quantile(filter(spatial_pred, species == "Saduria")$pred_mean, 0.9999))
+  ) +
+  labs(title = "Saduria") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank(),
+    legend.title = element_markdown(),
+    strip.text.x.top = element_blank()
+  ) +
+  geom_text(
+    data = annotations |> mutate(annotateText = c("(b)", "(e)")), size = 3.2,
+    aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = annotateText)
+  ) +
+  facet_wrap(~year, ncol = 1)
+
+# Sprat
+p3 <- plot_map2 +
+  geom_raster(
+    data = spatial_pred |> filter(species == "Sprat"),
+    aes(X * 1000, Y * 1000, fill = pred_mean)
+  ) +
+  geom_sf() +
+  scale_fill_viridis(
+    trans = "third_root_power",
+    #trans = "sqrt",
+    name = "<br> ",
+    option = "cividis",
+    #na.value = "#FFEA46FF",
+    breaks = c(1, 6, 20),
+    #limits = c(0, quantile(filter(spatial_pred, species == "Sprat")$pred_mean, 0.9999))
+  ) +
+  labs(title = "Sprat") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.title.x = element_blank(),
+    legend.title = element_markdown()
+  ) +
+  geom_text(
+    data = annotations |> mutate(annotateText = c("(c)", "(f)")), size = 3.2,
+    aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = annotateText)
+  ) +
+  facet_wrap(~year, ncol = 1, strip.position = "right")
+
+p1 + p2 + p3 + plot_layout(axes = "collect")
+
+ggsave(paste0(home, "/figures/spatial_predation.pdf"), width = 19, height = 12, units = "cm")
+```
+
+```{r}
+#| include: false
+#| eval: false
+
+# FOR NV grant
+# p1 <- plot_map2 +
+#   theme_sleek(base_size = 16) +
+#   guides(fill = guide_colorbar(legend.position = "bottom")) +
+#   geom_raster(data = spatial_pred |> filter(species == "Herring"),
+#               aes(X*1000, Y*1000, fill = pred_mean)) +
+#   geom_sf() +
+#   scale_fill_viridis(trans = "third_root_power", name = "Predation<br>density<br>(kg/km<sup>2</sup>))",
+#                      option = "cividis",
+#                      na.value = "#FFEA46FF",
+#                      breaks = c(0, 0.05, 0.2),
+#                      limits = c(0, quantile(filter(spatial_pred, species == "Herring")$pred_mean, 0.999))) +
+#   labs(title = "Herring") +
+#   theme(legend.title = element_markdown(),
+#         legend.position = "bottom",
+#         legend.direction = "horizontal") +
+#   geom_text(data = annotations |> mutate(annotateText = c("(a)","(d)")), size = 3.2,
+#             aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = annotateText))
+#
+# p3 <- plot_map2 +
+#   theme_sleek(base_size = 16) +
+#   guides(fill = guide_colorbar(legend.position = "bottom")) +
+#   geom_raster(data = spatial_pred |> filter(species == "Sprat"),
+#               aes(X*1000, Y*1000, fill = pred_mean)) +
+#   geom_sf() +
+#   scale_fill_viridis(trans = "third_root_power", name = "Predation<br>density<br>(kg/km<sup>2</sup>))",
+#                      option = "cividis",
+#                      na.value = "#FFEA46FF",
+#                      breaks = c(0, 4, 10, 16),
+#                      limits = c(0, quantile(filter(spatial_pred, species == "Sprat")$pred_mean, 0.999))) +
+#   labs(title = "Sprat") +
+#   theme(axis.text.y = element_blank(),
+#         axis.ticks.y = element_blank(),
+#         axis.title.y = element_blank(),
+#         legend.title = element_markdown(),
+#         legend.direction = "horizontal",
+#         legend.position = "bottom") +
+#   geom_text(data = annotations |> mutate(annotateText = c("(c)","(f)")), size = 3.2,
+#             aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = annotateText))
+#
+# p1 + p3
+#
+# ggsave(paste0(home, "/figures/NV/spatial_predation.pdf"), width = 18, height = 21, units = "cm")
+```
+
+
+## Plot CV in space for cod density and predation
+
+
+```{r}
+pred_grid_density_sub <- pred_grid_density |> filter(year %in% c(1994, 2022))
+
+tic()
+cv_pred <- bind_rows(
+  get_cv_predation(sim_her, years = c(1994, 2022), prey_name = "Herring"),
+  get_cv_predation(sim_sad, years = c(1994, 2022), prey_name = "Saduria"),
+  get_cv_predation(sim_spr, years = c(1994, 2022), prey_name = "Sprat")
+)
+toc()
+
+# Now do cod density
+density_cv <- pred_grid_density |>
+  filter(year %in% c(1994, 2022)) |>
+  summarise(
+    density_mean = mean(sim_density),
+    density_sd = sd(sim_density),
+    .by = c(year, X, Y)
+  ) |>
+  mutate(cv = density_sd / density_mean) |>
+  dplyr::select(-density_mean, -density_sd) |>
+  mutate(species = "Cod density")
+
+# Combine
+cv <- bind_rows(
+  cv_pred |>
+    mutate(species = fct_recode(species,
+      "Relative herring weight" = "Herring",
+      "Relative Saduria weight" = "Saduria",
+      "Relative sprat weight" = "Sprat"
+    )),
+  density_cv
+)
+
+p1 <- plot_map +
+  geom_raster(
+    data = cv,
+    aes(X * 1000, Y * 1000, fill = cv)
+  ) +
+  geom_sf() +
+  scale_fill_viridis(
+    option = "rocket",
+    trans = "sqrt") +
+  facet_grid(year ~ species) +
+  guides(fill = guide_colorbar(position = "inside")) +
+  theme(
+    legend.position.inside = c(0.035, 0.82),
+    legend.key.width = unit(0.2, "cm"),
+    legend.key.height = unit(0.25, "cm"),
+    legend.text = element_text(size = 8),
+    legend.direction = "vertical",
+    legend.title = element_text(size = 10),
+    strip.text.x.top = element_text(size = 10, margin = unit(rep(0.06, 4), "cm")),
+    strip.text.y.right = element_text(size = 10),
+    plot.title = element_text(margin = margin(0, 0, -10, 0))
+  )
+
+tag_facet(p1, fontface = 1, col = "gray30")
+
+ggsave(paste0(home, "/figures/supp/cv_density_relative_prey.pdf"), width = 19, height = 10, units = "cm")
+```
+
+
+## Plot relative prey weight predictions in space for two years
+
+
+```{r}
+# Here we can use the get_cv_predation and just use the median
+
+# Max predation by species (if I trim the plot)
+cv_pred |>
+  summarise(max = max(mean), .by = species)
+
+# Plot!
+viridis(n = 3, option = "magma") # high color
+
+plot_map3 <- plot_map2 +
+  theme(legend.position.inside = c(0.22, 0.84),
+        legend.key.width = unit(0.2, "cm"),
+        legend.key.height = unit(0.25, "cm"),
+        legend.text = element_text(size = 7),
+        legend.direction = "vertical",
+        legend.title = element_text(size = 9),
+        plot.title = element_text(hjust = 0.5))
+
+# Herring
+p1 <- plot_map3 +
+  geom_raster(
+    data = cv_pred |> filter(species == "Herring"),
+    aes(X * 1000, Y * 1000, fill = median)
+  ) +
+  geom_sf() +
+  scale_fill_viridis(
+    trans = "sqrt",
+    name = "Relative prey<br>weight (kg/kg)",
+    option = "magma",
+    #na.value = "#FCFDBFFF",
+    breaks = c(0.001, 0.0025, 0.005),
+    #limits = c(0, quantile(filter(cv_pred, species == "Herring")$median, 0.999))
+  ) +
+  labs(title = "Herring") +
+  theme(
+    axis.title.x = element_blank(),
+    legend.title = element_markdown(),
+    strip.text.x.top = element_blank()
+  ) +
+  geom_text(
+    data = annotations |> mutate(annotateText = c("(a)", "(d)")), size = 3.2,
+    aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = annotateText)
+  ) +
+  facet_wrap(~year, ncol = 1)
+
+# Saduria
+p2 <- plot_map3 +
+  geom_raster(
+    data = cv_pred |> filter(species == "Saduria"),
+    aes(X * 1000, Y * 1000, fill = median)
+  ) +
+  geom_sf() +
+  scale_fill_viridis(
+    trans = "sqrt",
+    name = "<br> <br> ",
+    option = "magma",
+    #na.value = "#FCFDBFFF",
+    breaks = c(0, 0.0025, 0.0075, 0.0125),
+    #limits = c(0, quantile(filter(cv_pred, species == "Saduria")$median, 0.999))
+  ) +
+  labs(title = "Saduria") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank(),
+    strip.text.x.top = element_blank(),
+    legend.title = element_markdown()
+  ) +
+  geom_text(
+    data = annotations |> mutate(annotateText = c("(b)", "(e)")), size = 3.2,
+    aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = annotateText)
+  ) +
+  facet_wrap(~year, ncol = 1)
+
+# Sprat
+p3 <- plot_map3 +
+  geom_raster(
+    data = cv_pred |> filter(species == "Sprat"),
+    aes(X * 1000, Y * 1000, fill = median)
+  ) +
+  geom_sf() +
+  scale_fill_viridis(
+    trans = "sqrt",
+    name = "<br> <br> ",
+    option = "magma",
+    #na.value = "#FCFDBFFF",
+    breaks = c(0, 0.0025, 0.0075, 0.0125),
+    #limits = c(0, quantile(filter(cv_pred, species == "Sprat")$median, 0.999))
+  ) +
+  labs(title = "Sprat") +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.title.x = element_blank(),
+    legend.title = element_markdown()
+  ) +
+  geom_text(
+    data = annotations |> mutate(annotateText = c("(c)", "(f)")), size = 3.2,
+    aes(x = xpos, y = ypos, hjust = hjust, vjust = vjust, label = annotateText)
+  ) +
+  facet_wrap(~year, ncol = 1, strip.position = "right")
+
+p1 + p2 + p3 + plot_layout(axes = "collect")
+
+ggsave(paste0(home, "/figures/spatial_relative_prey.pdf"), width = 19, height = 12, units = "cm")
+```
+
+
+## Spatial overlap over time
+
+
+```{r}
+#| message: false
+
+# Calculate overlap indices in space
+pred_grid_sum <- pred_grid_density |>
+  mutate(
+    cod_spr_ovr = loc_collocspfn(pred = sim_density, prey = biomass_spr),
+    cod_her_ovr = loc_collocspfn(pred = sim_density, prey = biomass_her),
+    cod_sad_ovr = loc_collocspfn(pred = sim_density, prey = saduria),
+    .by = c(year, sim)
+  ) |> # Stop here for plotting overlap in space
+  summarise(
+    cod_spr_ovr_tot = sum(cod_spr_ovr),
+    cod_her_ovr_tot = sum(cod_her_ovr),
+    cod_sad_ovr_tot = sum(cod_sad_ovr),
+    .by = c(year, sim)
+  ) |>
+  # Now calculate quantiles of annual overlap indices across sims
+  summarise(
+    cod_spr_ovr_tot_median = quantile(cod_spr_ovr_tot, prob = 0.5),
+    cod_spr_ovr_tot_lwr = quantile(cod_spr_ovr_tot, prob = 0.1),
+    cod_spr_ovr_tot_upr = quantile(cod_spr_ovr_tot, prob = 0.9),
+    cod_her_ovr_tot_median = quantile(cod_her_ovr_tot, prob = 0.5),
+    cod_her_ovr_tot_lwr = quantile(cod_her_ovr_tot, prob = 0.1),
+    cod_her_ovr_tot_upr = quantile(cod_her_ovr_tot, prob = 0.9),
+    cod_sad_ovr_tot_median = quantile(cod_sad_ovr_tot, prob = 0.5),
+    cod_sad_ovr_tot_lwr = quantile(cod_sad_ovr_tot, prob = 0.1),
+    cod_sad_ovr_tot_upr = quantile(cod_sad_ovr_tot, prob = 0.9),
+    .by = year
+  )
+
+clean_ovr <- pred_grid_sum |>
+  pivot_longer(
+    c(
+      cod_spr_ovr_tot_median, cod_spr_ovr_tot_lwr, cod_spr_ovr_tot_upr,
+      cod_her_ovr_tot_median, cod_her_ovr_tot_lwr, cod_her_ovr_tot_upr,
+      cod_sad_ovr_tot_median, cod_sad_ovr_tot_lwr, cod_sad_ovr_tot_upr
+    ),
+    names_to = "group", values_to = "value"
+  ) |>
+  mutate(
+    species = ifelse(grepl("her", group), "Herring", "Sprat"),
+    species = ifelse(grepl("sad", group), "Saduria", species),
+    var = ifelse(grepl("median", group), "median", "error")
+  ) |>
+  # dplyr::select(-group) |>
+  # pivot_wider(values_from = value, names_from = var) |>
+  mutate(species = as.factor(species))
+
+# Fit Beta gams to time series of overlap
+m <- brm(
+  value ~ species + s(year, by = species),
+  family = Beta(),
+  control = list(adapt_delta = 0.99),
+  data = clean_ovr |> filter(var == "median"))
+
+spr_ovr <- clean_ovr |>
+  dplyr::select(-species, -var) |>
+  pivot_wider(names_from = group, values_from = value) |>
+  dplyr::select(year, cod_spr_ovr_tot_median, cod_spr_ovr_tot_lwr, cod_spr_ovr_tot_upr) |>
+  rename(
+    median = cod_spr_ovr_tot_median,
+    lwr = cod_spr_ovr_tot_lwr,
+    upr = cod_spr_ovr_tot_upr
+  ) |>
+  mutate(species = "Sprat")
+
+her_ovr <- clean_ovr |>
+  dplyr::select(-species, -var) |>
+  pivot_wider(names_from = group, values_from = value) |>
+  dplyr::select(year, cod_her_ovr_tot_median, cod_her_ovr_tot_lwr, cod_her_ovr_tot_upr) |>
+  rename(
+    median = cod_her_ovr_tot_median,
+    lwr = cod_her_ovr_tot_lwr,
+    upr = cod_her_ovr_tot_upr
+  ) |>
+  mutate(species = "Herring")
+
+sad_ovr <- clean_ovr |>
+  dplyr::select(-species, -var) |>
+  pivot_wider(names_from = group, values_from = value) |>
+  dplyr::select(year, cod_sad_ovr_tot_median, cod_sad_ovr_tot_lwr, cod_sad_ovr_tot_upr) |>
+  rename(
+    median = cod_sad_ovr_tot_median,
+    lwr = cod_sad_ovr_tot_lwr,
+    upr = cod_sad_ovr_tot_upr
+  ) |>
+  mutate(species = "Saduria")
+
+clean_ovr_plot <- bind_rows(spr_ovr, her_ovr, sad_ovr)
+
+blues <- brewer.pal(n = 4, name = "Blues")
+
+clean_ovr |>
+  filter(var == "median") |> 
+  group_by(species) |>
+  data_grid(year = seq_range(year, n = 51)) |>
+  add_epred_draws(m) |>
+  ggplot() +
+  geom_errorbar(data = clean_ovr_plot, aes(year, median, ymin = lwr, ymax = upr),
+                width = 0, color = "grey40", alpha = 0.5,
+                linewidth = 0.6) +
+  geom_point(data = clean_ovr_plot, aes(year, median),
+             color = "grey30", alpha = 0.7) +
+  stat_lineribbon(aes(year, .epred), alpha = 0.25, .width = c(0.5, 0.9), size = 0.75,
+                  color = brewer.pal(n = 3, name = "Blues")[3]) +
+  facet_wrap(~species, ncol = 3) +
+  scale_fill_manual(values = blues[3:4]) +
+  theme(
+    aspect.ratio = 6 / 7,
+    strip.text.x.top = element_text(size = 10, margin = unit(rep(0.06, 4), "cm"))
+  ) +
+  guides(fill = "none") +
+  labs(x = "Year", y = "Spatial overlap index\n(Local index of collocation)")
+
+ggsave(paste0(home, "/figures/annual_overlap.pdf"), width = 18, height = 7, units = "cm")
+```
+
+```{r}
+#| include: false
+#| eval: false
+
+# for NV grant
+# ggplot(clean_ovr_plot |> filter(!species == "Saduria"),
+#        aes(year, median)) +
+#   theme_sleek(base_size = 18) +
+#   geom_errorbar(aes(ymin = lwr, ymax = upr), width = 0, color = "grey40", alpha = 0.7) +
+#   geom_point(color = "grey30", alpha = 0.8) +
+#   geom_line(data = p |> filter(!species == "Saduria"),
+#             aes(year, boot::inv.logit(est)), color = pal[2], linewidth = 0.9) +
+#   geom_ribbon(data = p |> filter(!species == "Saduria"),
+#               aes(x = year,
+#                   ymin = boot::inv.logit(est - 1.96*est_se),
+#                   ymax = boot::inv.logit(est + 1.96*est_se)),
+#               fill = pal[1], alpha = 0.3, inherit.aes = FALSE) +
+#   # facet_wrap(~factor(species, levels = c("Herring", "Sprat", "Saduria")),
+#   #            ncol = 3) +
+#   facet_wrap(~species, ncol = 3) +
+#   theme(aspect.ratio = 6/7) +
+#   labs(x = "Year", y = "Spatial overlap index\n(Local index of collocation)")
+#
+# ggsave(paste0(home, "/figures/NV/annual_overlap.pdf"), width = 16, height = 9, units = "cm")
+```
+
+
+## Correlation between spatial overlap and predation
+
+
+```{r}
+#| message: false
+
+clean_corr <- clean_plot |>
+  left_join(
+    clean_ovr_plot |>
+      rename(
+        median_ovr = median,
+        lwr_ovr = lwr,
+        upr_ovr = upr
+      ),
+    by = c("year", "species")
+  )
+
+p2 <- ggplot(clean_corr, aes(median_ovr, median)) +
+  geom_point(color = "gray30", alpha = 0.7) +
+  geom_errorbar(aes(ymax = upr, ymin = lwr),
+    color = "gray40",
+    alpha = 0.3
+  ) +
+  geom_errorbar(aes(xmax = upr_ovr, xmin = lwr_ovr),
+    color = "gray40",
+    alpha = 0.5
+  ) +
+  facet_grid2(metric ~ species,
+    scales = "free", independent = "all", switch = "y"
+  ) +
+  theme(
+    aspect.ratio = 1,
+    strip.placement = "outside",
+    strip.text.x.top = element_text(size = 10, margin = unit(rep(0.04, 4), "cm")),
+    strip.text.y.left = element_text(size = 10, margin = unit(rep(0.07, 4), "cm"))
+  ) +
+  labs(y = "", x = "Spatial overlap") +
+  stat_correlation(
+    size = 2.5, label.x = 0.98,
+    use_label(c("R", "R.CI"))
+  )
+
+tag_facet(p2, fontface = 1, col = "gray30", size = 3)
+
+ggsave(paste0(home, "/figures/corr.pdf"), width = 18, height = 12, units = "cm")
+```
+
+
+## Spatial overlap in space
+
+
+```{r plot overlap in space}
+#| message: false
+
+pred_grid_sp <- pred_grid_density |>
+  drop_na(saduria) |>
+  mutate(
+    cod_spr_ovr = loc_collocspfn(pred = sim_density, prey = biomass_spr),
+    cod_her_ovr = loc_collocspfn(pred = sim_density, prey = biomass_her),
+    cod_sad_ovr = loc_collocspfn(pred = sim_density, prey = saduria),
+    .by = c(year, sim)
+  ) |>
+  # Sum across sims, by year and spatial location
+  summarise(
+    cod_spr_ovr = mean(cod_spr_ovr),
+    cod_her_ovr = mean(cod_her_ovr),
+    cod_sad_ovr = mean(cod_sad_ovr),
+    .by = c(year, X, Y)
+  )
+
+# Sprat
+plot_map_fc +
+  geom_raster(
+    data = pred_grid_sp,
+    aes(X * 1000, Y * 1000, fill = cod_spr_ovr)
+  ) +
+  scale_fill_viridis(
+    trans = "sqrt", name = "Cod-Sprat overlap",
+    option = "mako",
+    na.value = "#DEF5E5FF",
+    limits = c(0, quantile(pred_grid_sp$cod_spr_ovr, 0.999))
+  ) +
+  labs(caption = paste("maximum estimated overlap =", round(max(pred_grid_sp$cod_spr_ovr), digits = 4)))
+
+# ggsave(paste0(home, "/figures/supp/spr_overlap_space.pdf"), width = 19, height = 19, units = "cm")
+
+# Herring
+plot_map_fc +
+  geom_raster(
+    data = pred_grid_sp,
+    aes(X * 1000, Y * 1000, fill = cod_her_ovr)
+  ) +
+  scale_fill_viridis(
+    trans = "sqrt", name = "Cod-Herring overlap",
+    option = "mako",
+    na.value = "#DEF5E5FF",
+    limits = c(0, quantile(pred_grid_sp$cod_her_ovr, 0.999))
+  ) +
+  labs(caption = paste("maximum estimated overlap =", round(max(pred_grid_sp$cod_her_ovr), digits = 4)))
+
+# ggsave(paste0(home, "/figures/supp/her_overlap_space.pdf"), width = 19, height = 19, units = "cm")
+
+# Saduria
+plot_map_fc +
+  geom_raster(
+    data = pred_grid_sp,
+    aes(X * 1000, Y * 1000, fill = cod_sad_ovr)
+  ) +
+  scale_fill_viridis(
+    trans = "sqrt", name = "Cod-Saduria overlap",
+    option = "mako",
+    na.value = "#DEF5E5FF", limits = c(0, quantile(pred_grid_sp$cod_sad_ovr, 0.999))
+  ) +
+  labs(caption = paste("maximum estimated overlap =", round(max(pred_grid_sp$cod_sad_ovr), digits = 4)))
+
+# ggsave(paste0(home, "/figures/supp/sad_overlap_space.pdf"), width = 19, height = 19, units = "cm")
+
+# Selected years
+pred_grid_sp_sum <- pred_grid_sp |>
+  filter(year %in% c(1994, 2022)) |>
+  pivot_longer(c(cod_spr_ovr, cod_her_ovr, cod_sad_ovr),
+    names_to = "species"
+  ) |>
+  summarise(
+    mean_overlap = mean(value),
+    .by = c(year, X, Y, species)
+  ) |>
+  mutate(species = fct_recode(species,
+    "Sprat" = "cod_spr_ovr",
+    "Herring" = "cod_her_ovr",
+    "Saduria" = "cod_sad_ovr"
+  ))
+
+p3 <- plot_map +
+  geom_raster(
+    data = pred_grid_sp_sum,
+    aes(X * 1000, Y * 1000, fill = mean_overlap)
+  ) +
+  geom_sf() +
+  # facet_wrap(~factor(species, levels = c("Herring", "Sprat", "Saduria"))) +
+  facet_grid(year ~ species) +
+  scale_fill_viridis(trans = "third_root_power", name = "Spatial overlap", option = "mako") +
+  theme(
+    legend.position.inside = c(0.072, 0.842),
+    legend.key.width = unit(0.2, "cm"),
+    legend.key.height = unit(0.28, "cm"),
+    legend.text = element_text(size = 7),
+    legend.title = element_text(size = 9),
+    legend.direction = "vertical",
+    strip.text.x.top = element_text(size = 10, margin = unit(rep(0.06, 4), "cm")),
+    strip.text.y.right = element_text(size = 10)
+  ) +
+  guides(fill = guide_colorbar(position = "inside")) +
+  NULL
+
+tag_facet(p3, fontface = 1, col = "gray30")
+
+ggsave(paste0(home, "/figures/overlap_space.pdf"), width = 19, height = 12, units = "cm")
+```
+
+
+## Sensitivity: Overlap index
+
+
+```{r}
+#| message: false
+
+# Calculate overlap indices in space
+pred_grid_sum <- pred_grid_density |>
+  mutate(
+    cod_spr_ovr = thorson_overlapspfn(pred = sim_density, prey = biomass_spr),
+    cod_her_ovr = thorson_overlapspfn(pred = sim_density, prey = biomass_her),
+    cod_sad_ovr = thorson_overlapspfn(pred = sim_density, prey = saduria),
+    .by = c(year, sim)
+  ) |> # Stop here for plotting overlap in space
+  summarise(
+    cod_spr_ovr_tot = sum(cod_spr_ovr),
+    cod_her_ovr_tot = sum(cod_her_ovr),
+    cod_sad_ovr_tot = sum(cod_sad_ovr),
+    .by = c(year, sim)
+  ) |>
+  # Now calculate quantiles of annual overlap indices across sims
+  summarise(
+    cod_spr_ovr_tot_median = quantile(cod_spr_ovr_tot, prob = 0.5),
+    cod_spr_ovr_tot_lwr = quantile(cod_spr_ovr_tot, prob = 0.1),
+    cod_spr_ovr_tot_upr = quantile(cod_spr_ovr_tot, prob = 0.9),
+    cod_her_ovr_tot_median = quantile(cod_her_ovr_tot, prob = 0.5),
+    cod_her_ovr_tot_lwr = quantile(cod_her_ovr_tot, prob = 0.1),
+    cod_her_ovr_tot_upr = quantile(cod_her_ovr_tot, prob = 0.9),
+    cod_sad_ovr_tot_median = quantile(cod_sad_ovr_tot, prob = 0.5),
+    cod_sad_ovr_tot_lwr = quantile(cod_sad_ovr_tot, prob = 0.1),
+    cod_sad_ovr_tot_upr = quantile(cod_sad_ovr_tot, prob = 0.9),
+    .by = year
+  )
+
+clean_ovr <- pred_grid_sum |>
+  pivot_longer(
+    c(
+      cod_spr_ovr_tot_median, cod_spr_ovr_tot_lwr, cod_spr_ovr_tot_upr,
+      cod_her_ovr_tot_median, cod_her_ovr_tot_lwr, cod_her_ovr_tot_upr,
+      cod_sad_ovr_tot_median, cod_sad_ovr_tot_lwr, cod_sad_ovr_tot_upr
+    ),
+    names_to = "group", values_to = "value"
+  ) |>
+  mutate(
+    species = ifelse(grepl("her", group), "Herring", "Sprat"),
+    species = ifelse(grepl("sad", group), "Saduria", species),
+    var = ifelse(grepl("median", group), "median", "error")
+  ) |>
+  # dplyr::select(-group) |>
+  # pivot_wider(values_from = value, names_from = var) |>
+  mutate(species = as.factor(species))
+
+beta_gam <- sdmTMB(value ~ species + s(year, by = species),
+  spatial = "off",
+  family = Beta(link = "logit"),
+  data = clean_ovr |> filter(var == "median")
+)
+
+nd <- expand_grid(
+  species = as.factor(c("Sprat", "Herring", "Saduria")),
+  year = unique(clean_ovr$year)
+)
+
+p <- predict(beta_gam, newdata = nd, se_fit = TRUE)
+
+spr_ovr <- clean_ovr |>
+  dplyr::select(-species, -var) |>
+  pivot_wider(names_from = group, values_from = value) |>
+  dplyr::select(year, cod_spr_ovr_tot_median, cod_spr_ovr_tot_lwr, cod_spr_ovr_tot_upr) |>
+  rename(
+    median = cod_spr_ovr_tot_median,
+    lwr = cod_spr_ovr_tot_lwr,
+    upr = cod_spr_ovr_tot_upr
+  ) |>
+  mutate(species = "Sprat")
+
+her_ovr <- clean_ovr |>
+  dplyr::select(-species, -var) |>
+  pivot_wider(names_from = group, values_from = value) |>
+  dplyr::select(year, cod_her_ovr_tot_median, cod_her_ovr_tot_lwr, cod_her_ovr_tot_upr) |>
+  rename(
+    median = cod_her_ovr_tot_median,
+    lwr = cod_her_ovr_tot_lwr,
+    upr = cod_her_ovr_tot_upr
+  ) |>
+  mutate(species = "Herring")
+
+sad_ovr <- clean_ovr |>
+  dplyr::select(-species, -var) |>
+  pivot_wider(names_from = group, values_from = value) |>
+  dplyr::select(year, cod_sad_ovr_tot_median, cod_sad_ovr_tot_lwr, cod_sad_ovr_tot_upr) |>
+  rename(
+    median = cod_sad_ovr_tot_median,
+    lwr = cod_sad_ovr_tot_lwr,
+    upr = cod_sad_ovr_tot_upr
+  ) |>
+  mutate(species = "Saduria")
+
+clean_ovr_plot <- bind_rows(spr_ovr, her_ovr, sad_ovr)
+
+p2 <- ggplot(clean_ovr_plot, aes(year, median)) +
+  geom_errorbar(aes(ymin = lwr, ymax = upr), width = 0, color = "grey40", alpha = 0.7) +
+  geom_point(color = "grey30", alpha = 0.8) +
+  geom_line(data = p, aes(year, boot::inv.logit(est)), color = pal[2], linewidth = 0.9) +
+  geom_ribbon(
+    data = p, aes(
+      x = year,
+      ymin = boot::inv.logit(est - 1.96 * est_se),
+      ymax = boot::inv.logit(est + 1.96 * est_se)
+    ),
+    fill = pal[1], alpha = 0.3, inherit.aes = FALSE
+  ) +
+  facet_wrap(~species, ncol = 3) +
+  theme(
+    aspect.ratio = 6 / 7,
+    strip.text.x.top = element_text(size = 10, margin = unit(rep(0.06, 4), "cm"))
+  ) +
+  labs(x = "Year", y = "Spatial overlap index\n(Local index of collocation)")
+
+tag_facet(p2, fontface = 1, col = "gray30")
+
+p1 / p2
+
+ggsave(paste0(home, "/figures/supp/additional_annual_overlap.pdf"), width = 18, height = 12, units = "cm")
+
+
+# Now do the correlation
+clean_corr <- clean_plot |>
+  left_join(
+    clean_ovr_plot |>
+      rename(
+        median_ovr = median,
+        lwr_ovr = lwr,
+        upr_ovr = upr
+      ),
+    by = c("year", "species")
+  )
+
+p2 <- ggplot(clean_corr, aes(median_ovr, median)) +
+  geom_point(color = "gray30", alpha = 0.7) +
+  geom_errorbar(aes(ymax = upr, ymin = lwr),
+    color = "gray40",
+    alpha = 0.3
+  ) +
+  geom_errorbar(aes(xmax = upr_ovr, xmin = lwr_ovr),
+    color = "gray40",
+    alpha = 0.5
+  ) +
+  facet_grid2(metric ~ species,
+    scales = "free", independent = "all", switch = "y"
+  ) +
+  theme(
+    aspect.ratio = 1,
+    strip.placement = "outside",
+    strip.text.x.top = element_text(size = 10, margin = unit(rep(0.04, 4), "cm")),
+    strip.text.y.left = element_text(size = 10, margin = unit(rep(0.07, 4), "cm"))
+  ) +
+  labs(y = "", x = "Spatial overlap") +
+  stat_correlation(
+    size = 2.5, label.x = 0.98,
+    use_label(c("R", "R.CI"))
+  )
+
+tag_facet(p2, fontface = 1, col = "gray30", size = 3)
+```
+
+```{r}
+#| include: false
+#| message: false
+
+# for NV grant
+# plot_map +
+#   theme_sleek(base_size = 16) +
+#   geom_raster(data = pred_grid_sp_sum |>
+#                 filter(!species == "Saduria"),
+#               aes(X*1000, Y*1000, fill = mean_overlap)) +
+#   geom_sf() +
+#   #facet_wrap(~factor(species, levels = c("Herring", "Sprat", "Saduria"))) +
+#   facet_grid(year~species) +
+#   scale_fill_viridis(trans = "third_root_power", name = "Spatial\noverlap", option = "mako",
+#                      breaks = c(0, 2e-04, 6e-04)) +
+#   #guides(fill = guide_colorbar(position = "bottom")) +
+#   theme(legend.position = "right",
+#         legend.key.width = unit(0.3, "cm"),
+#         legend.key.height = unit(0.5, "cm"),
+#         legend.direction = "vertical") +
+#   NULL
+#
+# ggsave(paste0(home, "/figures/NV/overlap_space.pdf"), width = 17, height = 14, units = "cm")
+```
+
