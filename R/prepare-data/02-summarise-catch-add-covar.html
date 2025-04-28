@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Max Lindmark">
-<meta name="dcterms.date" content="2025-02-04">
+<meta name="dcterms.date" content="2025-03-19">
 
 <title>Summarise density data and add environmental covariates</title>
 <style>
@@ -3084,7 +3084,7 @@ vertical-align: -.125em;
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">February 4, 2025</p>
+      <p class="date">March 19, 2025</p>
     </div>
   </div>
   
@@ -3156,20 +3156,17 @@ vertical-align: -.125em;
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="do">## Add in the environmental variables</span></span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>dat <span class="ot">&lt;-</span> d_haul <span class="sc">|&gt;</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">month_year =</span> <span class="fu">paste</span>(month, year, <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>))</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>covPath <span class="ot">&lt;-</span> <span class="fu">paste0</span>(home, <span class="st">&quot;/data/covariates&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">month_year =</span> <span class="fu">paste</span>(month, year, <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <section id="oxygen" class="level4">
 <h4 class="anchored" data-anchor-id="oxygen">Oxygen</h4>
 <div class="cell" data-layout-align="center">
 <div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Source:</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="co"># https://data.marine.copernicus.eu/product/BALTICSEA_ANALYSISFORECAST_BGC_003_007/download?dataset=cmems_mod_bal_bgc_anfc_P1M-m_202311</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co"># https://data.marine.copernicus.eu/product/BALTICSEA_MULTIYEAR_BGC_003_012/download?dataset=cmems_mod_bal_bgc_my_P1M-m_202303</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Print details</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">nc_open</span>(<span class="fu">paste</span>(covPath, <span class="st">&quot;oxygen&quot;</span>, <span class="st">&quot;cmems_mod_bal_bgc_my_P1M-m_1718018848983.nc&quot;</span>, <span class="at">sep =</span> <span class="st">&quot;/&quot;</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="co"># https://data.marine.copernicus.eu/product/BALTICSEA_MULTIYEAR_BGC_003_012/download?dataset=cmems_mod_bal_bgc_my_P1M-m_202303</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Print details</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">nc_open</span>(<span class="st">&quot;/Users/maxlindmark/Dropbox/Max work/R/spatial-metabolic-index/data/covariates/cmems_mod_bal_bgc_my_P1M-m_1742291088556.nc&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>File /Users/maxlindmark/Dropbox/Max work/R/pred-prey-overlap/data/covariates/oxygen/cmems_mod_bal_bgc_my_P1M-m_1718018848983.nc (NC_FORMAT_NETCDF4):
+<pre><code>File /Users/maxlindmark/Dropbox/Max work/R/spatial-metabolic-index/data/covariates/cmems_mod_bal_bgc_my_P1M-m_1742291088556.nc (NC_FORMAT_NETCDF4):
 
      1 variables (excluding dimension variables):
         float o2b[longitude,latitude,time]   (Contiguous storage)  
@@ -3177,28 +3174,32 @@ vertical-align: -.125em;
             _FillValue: NaN
             standard_name: mole_concentration_of_dissolved_molecular_oxygen_in_sea_water
             long_name: Dissolved Oxygen Concentration
+            cell_methods: time: mean
+            interval_operation: 90 s
+            interval_write: 1 d
+            missing_value: -999
+            online_operation: average
+            unit_long: millimole O2 per unit volume
 
      3 dimensions:
-        latitude  Size:404 
-            standard_name: latitude
-            long_name: Latitude
-            units: degrees_north
-            unit_long: Degrees North
-            axis: Y
-            valid_min: 53.0082969665527
-            valid_max: 65.8909912109375
-        longitude  Size:505 
-            standard_name: longitude
-            long_name: Longitude
-            units: degrees_east
-            unit_long: Degrees East
-            axis: X
-        time  Size:348 
+        time  Size:372 
             standard_name: time
             long_name: Time
             units: seconds since 1970-01-01 00:00:00
             calendar: gregorian
             axis: T
+        latitude  Size:300 
+            standard_name: latitude
+            long_name: Latitude
+            units: degrees_north
+            unit_long: Degrees North
+            axis: Y
+        longitude  Size:342 
+            standard_name: longitude
+            long_name: Longitude
+            units: degrees_east
+            unit_long: Degrees East
+            axis: X
 
     12 global attributes:
         Conventions: CF-1.11
@@ -3212,130 +3213,63 @@ vertical-align: -.125em;
         subset:source: ARCO data downloaded from the Marine Data Store using the MyOcean Data Portal
         subset:productId: BALTICSEA_MULTIYEAR_BGC_003_012
         subset:datasetId: cmems_mod_bal_bgc_my_P1M-m_202303
-        subset:date: 2024-06-10T11:27:28.983Z</code></pre>
+        subset:date: 2025-03-18T09:44:48.557Z</code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>oxy_tibble <span class="ot">&lt;-</span> <span class="fu">tidync</span>(<span class="fu">paste</span>(covPath, <span class="st">&quot;oxygen&quot;</span>,</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;cmems_mod_bal_bgc_my_P1M-m_1718018848983.nc&quot;</span>,</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">sep =</span> <span class="st">&quot;/&quot;</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>)) <span class="sc">|&gt;</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">hyper_tibble</span>() <span class="sc">|&gt;</span></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">as_datetime</span>(time, <span class="at">origin =</span> <span class="st">&quot;1970-01-01&quot;</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(date),</span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">day =</span> <span class="fu">day</span>(date),</span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">year =</span> <span class="fu">year</span>(date),</span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">month_year =</span> <span class="fu">paste</span>(month, year, <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>),</span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">oxy =</span> o2b <span class="sc">*</span> <span class="fl">0.0223909</span></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>  )</span>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>oxy_tibble <span class="ot">&lt;-</span> <span class="fu">tidync</span>(<span class="st">&quot;/Users/maxlindmark/Dropbox/Max work/R/spatial-metabolic-index/data/covariates/cmems_mod_bal_bgc_my_P1M-m_1742291088556.nc&quot;</span>) <span class="sc">|&gt;</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">hyper_tibble</span>() <span class="sc">|&gt;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">as_datetime</span>(time, <span class="at">origin =</span> <span class="st">&quot;1970-01-01&quot;</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(date),</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">day =</span> <span class="fu">day</span>(date),</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">year =</span> <span class="fu">year</span>(date),</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">month_year =</span> <span class="fu">paste</span>(month, year, <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>),</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">oxy =</span> o2b <span class="sc">*</span> <span class="fl">0.0223909</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Loop through all year combos, extract the temperatures at the data locations</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>oxy_list <span class="ot">&lt;-</span> <span class="fu">list</span>()</span>
 <span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Now do recent data (forecast)</span></span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">nc_open</span>(<span class="fu">paste</span>(covPath, <span class="st">&quot;oxygen&quot;</span>, <span class="st">&quot;cmems_mod_bal_bgc_anfc_P1M-m_1718022118172.nc&quot;</span>, <span class="at">sep =</span> <span class="st">&quot;/&quot;</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code>File /Users/maxlindmark/Dropbox/Max work/R/pred-prey-overlap/data/covariates/oxygen/cmems_mod_bal_bgc_anfc_P1M-m_1718022118172.nc (NC_FORMAT_NETCDF4):
-
-     1 variables (excluding dimension variables):
-        float o2b[longitude,latitude,time]   (Contiguous storage)  
-            units: mmol m-3
-            _FillValue: NaN
-            standard_name: mole_concentration_of_dissolved_molecular_oxygen_in_sea_water
-            long_name: Dissolved Oxygen Concentration
-
-     3 dimensions:
-        latitude  Size:323 
-            standard_name: latitude
-            long_name: Latitude
-            units: degrees_north
-            unit_long: Degrees North
-            axis: Y
-            valid_min: 53.0082969665527
-            valid_max: 65.8909912109375
-        longitude  Size:456 
-            standard_name: longitude
-            long_name: Longitude
-            units: degrees_east
-            unit_long: Degrees East
-            axis: X
-        time  Size:30 
-            standard_name: time
-            long_name: Time
-            units: seconds since 1970-01-01 00:00:00
-            calendar: gregorian
-            axis: T
-
-    11 global attributes:
-        Conventions: CF-1.11
-        title: CMEMS ERGOM monthly integrated model fields
-        institution: Baltic MFC, PU Swedish Meteorological and Hydrological Institute
-        source: CMEMS BAL MFC NEMO model output converted to NetCDF
-        contact: servicedesk.cmems@mercator-ocean.eu
-        references: https://marine.copernicus.eu/
-        comment: Data on cropped native product grid. Horizontal velocities destagged
-        subset:source: ARCO data downloaded from the Marine Data Store using the MyOcean Data Portal
-        subset:productId: BALTICSEA_ANALYSISFORECAST_BGC_003_007
-        subset:datasetId: cmems_mod_bal_bgc_anfc_P1M-m_202311
-        subset:date: 2024-06-10T12:21:58.172Z</code></pre>
-</div>
-<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>oxy_tibble_new <span class="ot">&lt;-</span> <span class="fu">tidync</span>(<span class="fu">paste</span>(covPath, <span class="st">&quot;oxygen&quot;</span>,</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;cmems_mod_bal_bgc_anfc_P1M-m_1718022118172.nc&quot;</span>,</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">sep =</span> <span class="st">&quot;/&quot;</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>)) <span class="sc">|&gt;</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">hyper_tibble</span>() <span class="sc">|&gt;</span></span>
-<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">as_datetime</span>(time, <span class="at">origin =</span> <span class="st">&quot;1970-01-01&quot;</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(date),</span>
-<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">day =</span> <span class="fu">day</span>(date),</span>
-<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">year =</span> <span class="fu">year</span>(date),</span>
-<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">month_year =</span> <span class="fu">paste</span>(month, year, <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>),</span>
-<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">oxy =</span> o2b <span class="sc">*</span> <span class="fl">0.0223909</span></span>
-<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(year <span class="sc">&gt;</span> <span class="dv">2021</span>)</span>
-<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>oxy_tibble <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(oxy_tibble, oxy_tibble_new)</span>
-<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Loop through all year combos, extract the temperatures at the data locations</span></span>
-<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>oxy_list <span class="ot">&lt;-</span> <span class="fu">list</span>()</span>
-<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">unique</span>(dat<span class="sc">$</span>month_year)) {</span>
-<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>  d_sub <span class="ot">&lt;-</span> <span class="fu">filter</span>(dat, month_year <span class="sc">==</span> i)</span>
-<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>  oxy_tibble_sub <span class="ot">&lt;-</span> <span class="fu">filter</span>(oxy_tibble, month_year <span class="sc">==</span> i)</span>
-<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Convert to raster</span></span>
-<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(oxy_tibble_sub, <span class="fu">aes</span>(longitude, latitude)) <span class="sc">+</span></span>
-<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="fl">0.1</span>)</span>
-<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a>  oxy_raster <span class="ot">&lt;-</span> <span class="fu">as_spatraster</span>(oxy_tibble_sub,</span>
-<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a>    <span class="at">xycols =</span> <span class="dv">2</span><span class="sc">:</span><span class="dv">3</span>,</span>
-<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a>    <span class="at">crs =</span> <span class="st">&quot;WGS84&quot;</span>, <span class="at">digits =</span> <span class="dv">3</span></span>
-<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>() <span class="sc">+</span></span>
-<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_spatraster</span>(<span class="at">data =</span> oxy_raster<span class="sc">$</span>oxy, <span class="fu">aes</span>(<span class="at">fill =</span> oxy)) <span class="sc">+</span></span>
-<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a>    <span class="fu">scale_fill_viridis</span>(<span class="at">option =</span> <span class="st">&quot;magma&quot;</span>) <span class="sc">+</span></span>
-<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggtitle</span>(i)</span>
-<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Extract from raster</span></span>
-<span id="cb9-40"><a href="#cb9-40" aria-hidden="true" tabindex="-1"></a>  d_sub<span class="sc">$</span>oxy <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">extract</span>(</span>
-<span id="cb9-41"><a href="#cb9-41" aria-hidden="true" tabindex="-1"></a>    oxy_raster<span class="sc">$</span>oxy,</span>
-<span id="cb9-42"><a href="#cb9-42" aria-hidden="true" tabindex="-1"></a>    d_sub <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">select</span>(lon, lat)</span>
-<span id="cb9-43"><a href="#cb9-43" aria-hidden="true" tabindex="-1"></a>  )<span class="sc">$</span>oxy</span>
-<span id="cb9-44"><a href="#cb9-44" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-45"><a href="#cb9-45" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Save</span></span>
-<span id="cb9-46"><a href="#cb9-46" aria-hidden="true" tabindex="-1"></a>  oxy_list[[i]] <span class="ot">&lt;-</span> d_sub</span>
-<span id="cb9-47"><a href="#cb9-47" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb9-48"><a href="#cb9-48" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-49"><a href="#cb9-49" aria-hidden="true" tabindex="-1"></a>d_oxy <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(oxy_list)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">unique</span>(dat<span class="sc">$</span>month_year)) {</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>  d_sub <span class="ot">&lt;-</span> <span class="fu">filter</span>(dat, month_year <span class="sc">==</span> i)</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>  oxy_tibble_sub <span class="ot">&lt;-</span> <span class="fu">filter</span>(oxy_tibble, month_year <span class="sc">==</span> i)</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Convert to raster</span></span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(oxy_tibble_sub, <span class="fu">aes</span>(longitude, latitude)) <span class="sc">+</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="fl">0.1</span>)</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>  oxy_raster <span class="ot">&lt;-</span> <span class="fu">as_spatraster</span>(oxy_tibble_sub,</span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">xycols =</span> <span class="dv">2</span><span class="sc">:</span><span class="dv">3</span>,</span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">crs =</span> <span class="st">&quot;WGS84&quot;</span>, <span class="at">digits =</span> <span class="dv">3</span></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_spatraster</span>(<span class="at">data =</span> oxy_raster<span class="sc">$</span>oxy, <span class="fu">aes</span>(<span class="at">fill =</span> oxy)) <span class="sc">+</span></span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>    <span class="fu">scale_fill_viridis</span>(<span class="at">option =</span> <span class="st">&quot;magma&quot;</span>) <span class="sc">+</span></span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggtitle</span>(i)</span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Extract from raster</span></span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>  d_sub<span class="sc">$</span>oxy <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">extract</span>(</span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>    oxy_raster<span class="sc">$</span>oxy,</span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>    d_sub <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">select</span>(lon, lat)</span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>  )<span class="sc">$</span>oxy</span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Save</span></span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a>  oxy_list[[i]] <span class="ot">&lt;-</span> d_sub</span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a>d_oxy <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(oxy_list)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="temperature-salinity" class="level4">
 <h4 class="anchored" data-anchor-id="temperature-salinity">Temperature &amp; Salinity</h4>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Source</span></span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="co"># https://data.marine.copernicus.eu/product/BALTICSEA_MULTIYEAR_PHY_003_011/description</span></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="co"># https://data.marine.copernicus.eu/product/BALTICSEA_ANALYSISFORECAST_PHY_003_006/description</span></span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Print details</span></span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">nc_open</span>(<span class="fu">paste</span>(covPath, <span class="st">&quot;temperature_salinity&quot;</span>, <span class="st">&quot;cmems_mod_bal_phy_my_P1M-m_1718087629163.nc&quot;</span>, <span class="at">sep =</span> <span class="st">&quot;/&quot;</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Source</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Salinity and temperature</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="co"># https://data.marine.copernicus.eu/product/BALTICSEA_MULTIYEAR_PHY_003_011/download?dataset=cmems_mod_bal_phy_my_P1M-m_202303</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Print details</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">nc_open</span>(<span class="st">&quot;/Users/maxlindmark/Dropbox/Max work/R/spatial-metabolic-index/data/covariates/cmems_mod_bal_phy_my_P1M-m_1742290961273.nc&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>File /Users/maxlindmark/Dropbox/Max work/R/pred-prey-overlap/data/covariates/temperature_salinity/cmems_mod_bal_phy_my_P1M-m_1718087629163.nc (NC_FORMAT_NETCDF4):
+<pre><code>File /Users/maxlindmark/Dropbox/Max work/R/spatial-metabolic-index/data/covariates/cmems_mod_bal_phy_my_P1M-m_1742290961273.nc (NC_FORMAT_NETCDF4):
 
      2 variables (excluding dimension variables):
         float bottomT[longitude,latitude,time]   (Contiguous storage)  
@@ -3343,33 +3277,43 @@ vertical-align: -.125em;
             _FillValue: NaN
             standard_name: sea_water_potential_temperature_at_sea_floor
             long_name: Sea floor potential temperature
+            cell_methods: time: mean
+            interval_operation: 90 s
+            interval_write: 1 d
+            missing_value: -999
+            online_operation: average
+            unit_long: degrees Celsius
         float sob[longitude,latitude,time]   (Contiguous storage)  
             units: 0.001
             _FillValue: NaN
             standard_name: sea_water_salinity_at_sea_floor
             long_name: Sea water salinity at sea floor
+            cell_methods: time: mean
+            interval_operation: 90 s
+            interval_write: 1 d
+            missing_value: -999
+            online_operation: average
+            unit_long: 0.001
 
      3 dimensions:
-        latitude  Size:323 
-            standard_name: latitude
-            long_name: Latitude
-            units: degrees_north
-            unit_long: Degrees North
-            axis: Y
-            valid_min: 53.0082969665527
-            valid_max: 65.8909912109375
-        longitude  Size:418 
-            standard_name: longitude
-            long_name: Longitude
-            units: degrees_east
-            unit_long: Degrees East
-            axis: X
-        time  Size:348 
+        time  Size:372 
             standard_name: time
             long_name: Time
             units: seconds since 1970-01-01 00:00:00
             calendar: gregorian
             axis: T
+        latitude  Size:300 
+            standard_name: latitude
+            long_name: Latitude
+            units: degrees_north
+            unit_long: Degrees North
+            axis: Y
+        longitude  Size:342 
+            standard_name: longitude
+            long_name: Longitude
+            units: degrees_east
+            unit_long: Degrees East
+            axis: X
 
     11 global attributes:
         Conventions: CF-1.11
@@ -3382,166 +3326,95 @@ vertical-align: -.125em;
         subset:source: ARCO data downloaded from the Marine Data Store using the MyOcean Data Portal
         subset:productId: BALTICSEA_MULTIYEAR_PHY_003_011
         subset:datasetId: cmems_mod_bal_phy_my_P1M-m_202303
-        subset:date: 2024-06-11T06:33:49.163Z</code></pre>
+        subset:date: 2025-03-18T09:42:41.273Z</code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>st_tibble <span class="ot">&lt;-</span> <span class="fu">tidync</span>(<span class="fu">paste</span>(covPath, <span class="st">&quot;temperature_salinity&quot;</span>,</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;cmems_mod_bal_phy_my_P1M-m_1718087629163.nc&quot;</span>,</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">sep =</span> <span class="st">&quot;/&quot;</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>)) <span class="sc">|&gt;</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">hyper_tibble</span>() <span class="sc">|&gt;</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">as_datetime</span>(time, <span class="at">origin =</span> <span class="st">&quot;1970-01-01&quot;</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(date),</span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">day =</span> <span class="fu">day</span>(date),</span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">year =</span> <span class="fu">year</span>(date),</span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">month_year =</span> <span class="fu">paste</span>(month, year, <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>)</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Now do recent data (forecast)</span></span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">nc_open</span>(<span class="fu">paste</span>(covPath, <span class="st">&quot;temperature_salinity&quot;</span>, <span class="st">&quot;cmems_mod_bal_phy_anfc_P1M-m_1718087127439.nc&quot;</span>, <span class="at">sep =</span> <span class="st">&quot;/&quot;</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div class="cell-output cell-output-stdout">
-<pre><code>File /Users/maxlindmark/Dropbox/Max work/R/pred-prey-overlap/data/covariates/temperature_salinity/cmems_mod_bal_phy_anfc_P1M-m_1718087127439.nc (NC_FORMAT_NETCDF4):
-
-     2 variables (excluding dimension variables):
-        float bottomT[longitude,latitude,time]   (Contiguous storage)  
-            units: degrees_C
-            _FillValue: NaN
-            standard_name: sea_water_potential_temperature_at_sea_floor
-            long_name: Sea water potential temperature at sea floor (given for depth comprise between 0 and 500m)
-        float sob[longitude,latitude,time]   (Contiguous storage)  
-            units: 0.001
-            _FillValue: NaN
-            standard_name: sea_water_salinity_at_sea_floor
-            long_name: Sea water salinity at sea floor
-
-     3 dimensions:
-        latitude  Size:395 
-            standard_name: latitude
-            long_name: Latitude
-            units: degrees_north
-            unit_long: Degrees North
-            axis: Y
-            valid_min: 53.0082969665527
-            valid_max: 65.8909912109375
-        longitude  Size:426 
-            standard_name: longitude
-            long_name: Longitude
-            units: degrees_east
-            unit_long: Degrees East
-            axis: X
-        time  Size:30 
-            standard_name: time
-            long_name: Time
-            units: seconds since 1970-01-01 00:00:00
-            calendar: gregorian
-            axis: T
-
-    11 global attributes:
-        Conventions: CF-1.11
-        title: CMEMS NEMO monthly integrated model fields
-        institution: Baltic MFC, PU Swedish Meteorological and Hydrological Institute
-        source: CMEMS BAL MFC NEMO model output converted to NetCDF
-        contact: servicedesk.cmems@mercator-ocean.eu
-        references: https://marine.copernicus.eu/
-        comment: Data on cropped native product grid. Horizontal velocities destagged
-        subset:source: ARCO data downloaded from the Marine Data Store using the MyOcean Data Portal
-        subset:productId: BALTICSEA_ANALYSISFORECAST_PHY_003_006
-        subset:datasetId: cmems_mod_bal_phy_anfc_P1M-m_202311
-        subset:date: 2024-06-11T06:25:27.439Z</code></pre>
-</div>
-<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>st_tibble_new <span class="ot">&lt;-</span> <span class="fu">tidync</span>(<span class="fu">paste</span>(covPath, <span class="st">&quot;temperature_salinity&quot;</span>,</span>
-<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;cmems_mod_bal_phy_anfc_P1M-m_1718087127439.nc&quot;</span>,</span>
-<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">sep =</span> <span class="st">&quot;/&quot;</span></span>
-<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>)) <span class="sc">|&gt;</span></span>
-<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">hyper_tibble</span>() <span class="sc">|&gt;</span></span>
-<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">as_datetime</span>(time, <span class="at">origin =</span> <span class="st">&quot;1970-01-01&quot;</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(date),</span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">day =</span> <span class="fu">day</span>(date),</span>
-<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">year =</span> <span class="fu">year</span>(date),</span>
-<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">month_year =</span> <span class="fu">paste</span>(month, year, <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>)</span>
-<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(year <span class="sc">&gt;</span> <span class="dv">2021</span>)</span>
-<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>st_tibble <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(st_tibble, st_tibble_new)</span>
-<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a><span class="co"># Loop through all year combos, extract the temperatures at the data locations</span></span>
-<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>st_list <span class="ot">&lt;-</span> <span class="fu">list</span>()</span>
-<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">unique</span>(dat<span class="sc">$</span>month_year)) {</span>
-<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>  d_sub <span class="ot">&lt;-</span> <span class="fu">filter</span>(dat, month_year <span class="sc">==</span> i)</span>
-<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>  st_tibble_sub <span class="ot">&lt;-</span> <span class="fu">filter</span>(st_tibble, month_year <span class="sc">==</span> i)</span>
-<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Convert to raster</span></span>
-<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(st_tibble_sub, <span class="fu">aes</span>(longitude, latitude)) <span class="sc">+</span></span>
-<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="fl">0.1</span>)</span>
-<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>  st_raster <span class="ot">&lt;-</span> <span class="fu">as_spatraster</span>(st_tibble_sub,</span>
-<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a>    <span class="at">xycols =</span> <span class="dv">3</span><span class="sc">:</span><span class="dv">4</span>,</span>
-<span id="cb14-30"><a href="#cb14-30" aria-hidden="true" tabindex="-1"></a>    <span class="at">crs =</span> <span class="st">&quot;WGS84&quot;</span>, <span class="at">digits =</span> <span class="dv">3</span></span>
-<span id="cb14-31"><a href="#cb14-31" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb14-32"><a href="#cb14-32" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-33"><a href="#cb14-33" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>() <span class="sc">+</span></span>
-<span id="cb14-34"><a href="#cb14-34" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_spatraster</span>(<span class="at">data =</span> st_raster<span class="sc">$</span>bottomT, <span class="fu">aes</span>(<span class="at">fill =</span> bottomT)) <span class="sc">+</span></span>
-<span id="cb14-35"><a href="#cb14-35" aria-hidden="true" tabindex="-1"></a>    <span class="fu">scale_fill_viridis</span>(<span class="at">option =</span> <span class="st">&quot;magma&quot;</span>) <span class="sc">+</span></span>
-<span id="cb14-36"><a href="#cb14-36" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggtitle</span>(i)</span>
-<span id="cb14-37"><a href="#cb14-37" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-38"><a href="#cb14-38" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>() <span class="sc">+</span></span>
-<span id="cb14-39"><a href="#cb14-39" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_spatraster</span>(<span class="at">data =</span> st_raster<span class="sc">$</span>sob, <span class="fu">aes</span>(<span class="at">fill =</span> sob)) <span class="sc">+</span></span>
-<span id="cb14-40"><a href="#cb14-40" aria-hidden="true" tabindex="-1"></a>    <span class="fu">scale_fill_viridis</span>(<span class="at">option =</span> <span class="st">&quot;magma&quot;</span>) <span class="sc">+</span></span>
-<span id="cb14-41"><a href="#cb14-41" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggtitle</span>(i)</span>
-<span id="cb14-42"><a href="#cb14-42" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-43"><a href="#cb14-43" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Extract from raster</span></span>
-<span id="cb14-44"><a href="#cb14-44" aria-hidden="true" tabindex="-1"></a>  d_sub<span class="sc">$</span>temp <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">extract</span>(</span>
-<span id="cb14-45"><a href="#cb14-45" aria-hidden="true" tabindex="-1"></a>    st_raster<span class="sc">$</span>bottomT,</span>
-<span id="cb14-46"><a href="#cb14-46" aria-hidden="true" tabindex="-1"></a>    d_sub <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">select</span>(lon, lat)</span>
-<span id="cb14-47"><a href="#cb14-47" aria-hidden="true" tabindex="-1"></a>  )<span class="sc">$</span>bottomT</span>
-<span id="cb14-48"><a href="#cb14-48" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-49"><a href="#cb14-49" aria-hidden="true" tabindex="-1"></a>  d_sub<span class="sc">$</span>salinity <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">extract</span>(</span>
-<span id="cb14-50"><a href="#cb14-50" aria-hidden="true" tabindex="-1"></a>    st_raster<span class="sc">$</span>sob,</span>
-<span id="cb14-51"><a href="#cb14-51" aria-hidden="true" tabindex="-1"></a>    d_sub <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">select</span>(lon, lat)</span>
-<span id="cb14-52"><a href="#cb14-52" aria-hidden="true" tabindex="-1"></a>  )<span class="sc">$</span>sob</span>
-<span id="cb14-53"><a href="#cb14-53" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-54"><a href="#cb14-54" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Save</span></span>
-<span id="cb14-55"><a href="#cb14-55" aria-hidden="true" tabindex="-1"></a>  st_list[[i]] <span class="ot">&lt;-</span> d_sub</span>
-<span id="cb14-56"><a href="#cb14-56" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb14-57"><a href="#cb14-57" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb14-58"><a href="#cb14-58" aria-hidden="true" tabindex="-1"></a>d_st <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(st_list)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>st_tibble <span class="ot">&lt;-</span> <span class="fu">tidync</span>(<span class="st">&quot;/Users/maxlindmark/Dropbox/Max work/R/spatial-metabolic-index/data/covariates/cmems_mod_bal_phy_my_P1M-m_1742290961273.nc&quot;</span>) <span class="sc">|&gt;</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">hyper_tibble</span>() <span class="sc">|&gt;</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">date =</span> <span class="fu">as_datetime</span>(time, <span class="at">origin =</span> <span class="st">&quot;1970-01-01&quot;</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">month =</span> <span class="fu">month</span>(date),</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">day =</span> <span class="fu">day</span>(date),</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">year =</span> <span class="fu">year</span>(date),</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">month_year =</span> <span class="fu">paste</span>(month, year, <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>)</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Loop through all year combos, extract the temperatures at the data locations</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>st_list <span class="ot">&lt;-</span> <span class="fu">list</span>()</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">unique</span>(dat<span class="sc">$</span>month_year)) {</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>  d_sub <span class="ot">&lt;-</span> <span class="fu">filter</span>(dat, month_year <span class="sc">==</span> i)</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>  st_tibble_sub <span class="ot">&lt;-</span> <span class="fu">filter</span>(st_tibble, month_year <span class="sc">==</span> i)</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Convert to raster</span></span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(st_tibble_sub, <span class="fu">aes</span>(longitude, latitude)) <span class="sc">+</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="fl">0.1</span>)</span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>  st_raster <span class="ot">&lt;-</span> <span class="fu">as_spatraster</span>(st_tibble_sub,</span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">xycols =</span> <span class="dv">3</span><span class="sc">:</span><span class="dv">4</span>,</span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">crs =</span> <span class="st">&quot;WGS84&quot;</span>, <span class="at">digits =</span> <span class="dv">3</span></span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_spatraster</span>(<span class="at">data =</span> st_raster<span class="sc">$</span>bottomT, <span class="fu">aes</span>(<span class="at">fill =</span> bottomT)) <span class="sc">+</span></span>
+<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>    <span class="fu">scale_fill_viridis</span>(<span class="at">option =</span> <span class="st">&quot;magma&quot;</span>) <span class="sc">+</span></span>
+<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggtitle</span>(i)</span>
+<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>() <span class="sc">+</span></span>
+<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a>    <span class="fu">geom_spatraster</span>(<span class="at">data =</span> st_raster<span class="sc">$</span>sob, <span class="fu">aes</span>(<span class="at">fill =</span> sob)) <span class="sc">+</span></span>
+<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a>    <span class="fu">scale_fill_viridis</span>(<span class="at">option =</span> <span class="st">&quot;magma&quot;</span>) <span class="sc">+</span></span>
+<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a>    <span class="fu">ggtitle</span>(i)</span>
+<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Extract from raster</span></span>
+<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a>  d_sub<span class="sc">$</span>temp <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">extract</span>(</span>
+<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a>    st_raster<span class="sc">$</span>bottomT,</span>
+<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>    d_sub <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">select</span>(lon, lat)</span>
+<span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a>  )<span class="sc">$</span>bottomT</span>
+<span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-43"><a href="#cb10-43" aria-hidden="true" tabindex="-1"></a>  d_sub<span class="sc">$</span>salinity <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">extract</span>(</span>
+<span id="cb10-44"><a href="#cb10-44" aria-hidden="true" tabindex="-1"></a>    st_raster<span class="sc">$</span>sob,</span>
+<span id="cb10-45"><a href="#cb10-45" aria-hidden="true" tabindex="-1"></a>    d_sub <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">select</span>(lon, lat)</span>
+<span id="cb10-46"><a href="#cb10-46" aria-hidden="true" tabindex="-1"></a>  )<span class="sc">$</span>sob</span>
+<span id="cb10-47"><a href="#cb10-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-48"><a href="#cb10-48" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Save</span></span>
+<span id="cb10-49"><a href="#cb10-49" aria-hidden="true" tabindex="-1"></a>  st_list[[i]] <span class="ot">&lt;-</span> d_sub</span>
+<span id="cb10-50"><a href="#cb10-50" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb10-51"><a href="#cb10-51" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-52"><a href="#cb10-52" aria-hidden="true" tabindex="-1"></a>d_st <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(st_list)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># I have some combos of month_year, lon and lat that occur more than once in different haul_ids ...</span></span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>d_st2 <span class="ot">&lt;-</span> d_st <span class="sc">|&gt;</span></span>
-<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">id =</span> <span class="fu">paste</span>(month_year, lon, lat, <span class="at">sep =</span> <span class="st">&quot;:&quot;</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>(id, <span class="at">.keep_all =</span> <span class="cn">TRUE</span>) <span class="sc">|&gt;</span></span>
-<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(<span class="sc">-</span>id)</span>
-<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>d_oxy2 <span class="ot">&lt;-</span> d_oxy <span class="sc">|&gt;</span></span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">id =</span> <span class="fu">paste</span>(month_year, lon, lat, <span class="at">sep =</span> <span class="st">&quot;:&quot;</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>(id, <span class="at">.keep_all =</span> <span class="cn">TRUE</span>) <span class="sc">|&gt;</span></span>
-<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(<span class="sc">-</span>id)</span>
-<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>env_dat <span class="ot">&lt;-</span> d_st2 <span class="sc">|&gt;</span></span>
-<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(d_oxy2 <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">select</span>(month_year, lon, lat, oxy), <span class="at">by =</span> <span class="fu">c</span>(<span class="st">&quot;month_year&quot;</span>, <span class="st">&quot;lon&quot;</span>, <span class="st">&quot;lat&quot;</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(month_year, lon, lat, temp, salinity, oxy)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># I have some combos of month_year, lon and lat that occur more than once in different haul_ids ...</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>d_st2 <span class="ot">&lt;-</span> d_st <span class="sc">|&gt;</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">id =</span> <span class="fu">paste</span>(month_year, lon, lat, <span class="at">sep =</span> <span class="st">&quot;:&quot;</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>(id, <span class="at">.keep_all =</span> <span class="cn">TRUE</span>) <span class="sc">|&gt;</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(<span class="sc">-</span>id)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>d_oxy2 <span class="ot">&lt;-</span> d_oxy <span class="sc">|&gt;</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">id =</span> <span class="fu">paste</span>(month_year, lon, lat, <span class="at">sep =</span> <span class="st">&quot;:&quot;</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>(id, <span class="at">.keep_all =</span> <span class="cn">TRUE</span>) <span class="sc">|&gt;</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(<span class="sc">-</span>id)</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>env_dat <span class="ot">&lt;-</span> d_st2 <span class="sc">|&gt;</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(d_oxy2 <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">select</span>(month_year, lon, lat, oxy), <span class="at">by =</span> <span class="fu">c</span>(<span class="st">&quot;month_year&quot;</span>, <span class="st">&quot;lon&quot;</span>, <span class="st">&quot;lat&quot;</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(month_year, lon, lat, temp, salinity, oxy)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 <section id="depth" class="level4">
 <h4 class="anchored" data-anchor-id="depth">Depth</h4>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Only use unique locations and then left_join else it will take forever</span></span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="co"># https://gis.stackexchange.com/questions/411261/read-multiple-layers-raster-from-ncdf-file-using-terra-package</span></span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="co"># https://emodnet.ec.europa.eu/geoviewer/</span></span>
-<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>dep_raster <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">rast</span>(<span class="fu">paste0</span>(home, <span class="st">&quot;/data/covariates/depth/Mean depth natural colour (with land).nc&quot;</span>))</span>
-<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="co"># class(dep_raster)</span></span>
-<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="co"># plot(dep_raster)</span></span>
-<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>env_dat<span class="sc">$</span>depth <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">extract</span>(dep_raster, env_dat <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">select</span>(lon, lat))<span class="sc">$</span>elevation</span>
-<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(env_dat, <span class="fu">aes</span>(lon, lat, <span class="at">color =</span> depth <span class="sc">*</span> <span class="sc">-</span><span class="dv">1</span>)) <span class="sc">+</span></span>
-<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
-<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_color_viridis</span>(<span class="at">direction =</span> <span class="sc">-</span><span class="dv">1</span>) <span class="sc">+</span></span>
-<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_sf</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Only use unique locations and then left_join else it will take forever</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="co"># https://gis.stackexchange.com/questions/411261/read-multiple-layers-raster-from-ncdf-file-using-terra-package</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="co"># https://emodnet.ec.europa.eu/geoviewer/</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>dep_raster <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">rast</span>(<span class="fu">paste0</span>(home, <span class="st">&quot;/data/covariates/depth/Mean depth natural colour (with land).nc&quot;</span>))</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="co"># class(dep_raster)</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="co"># plot(dep_raster)</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>env_dat<span class="sc">$</span>depth <span class="ot">&lt;-</span> terra<span class="sc">::</span><span class="fu">extract</span>(dep_raster, env_dat <span class="sc">|&gt;</span> dplyr<span class="sc">::</span><span class="fu">select</span>(lon, lat))<span class="sc">$</span>elevation</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(env_dat, <span class="fu">aes</span>(lon, lat, <span class="at">color =</span> depth <span class="sc">*</span> <span class="sc">-</span><span class="dv">1</span>)) <span class="sc">+</span></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>() <span class="sc">+</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_color_viridis</span>(<span class="at">direction =</span> <span class="sc">-</span><span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_sf</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
@@ -3549,22 +3422,22 @@ vertical-align: -.125em;
 </figure>
 </div>
 </div>
-<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>env_dat<span class="sc">$</span>depth <span class="ot">&lt;-</span> env_dat<span class="sc">$</span>depth <span class="sc">*</span> <span class="sc">-</span><span class="dv">1</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>env_dat<span class="sc">$</span>depth <span class="ot">&lt;-</span> env_dat<span class="sc">$</span>depth <span class="sc">*</span> <span class="sc">-</span><span class="dv">1</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 </section>
 <section id="save-clean-file" class="level2">
 <h2 class="anchored" data-anchor-id="save-clean-file">Save clean file</h2>
 <div class="cell" data-layout-align="center">
-<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>d_haul <span class="ot">&lt;-</span> d_haul <span class="sc">|&gt;</span></span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">month_year =</span> <span class="fu">paste</span>(month, year, <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(env_dat, <span class="at">by =</span> <span class="fu">c</span>(<span class="st">&quot;month_year&quot;</span>, <span class="st">&quot;lon&quot;</span>, <span class="st">&quot;lat&quot;</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>  tidylog<span class="sc">::</span><span class="fu">drop_na</span>(oxy, temp, depth)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>d_haul <span class="ot">&lt;-</span> d_haul <span class="sc">|&gt;</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">month_year =</span> <span class="fu">paste</span>(month, year, <span class="at">sep =</span> <span class="st">&quot;_&quot;</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(env_dat, <span class="at">by =</span> <span class="fu">c</span>(<span class="st">&quot;month_year&quot;</span>, <span class="st">&quot;lon&quot;</span>, <span class="st">&quot;lat&quot;</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>  tidylog<span class="sc">::</span><span class="fu">drop_na</span>(oxy, temp, depth)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
-<pre><code>drop_na: removed 403 rows (3%), 12,172 rows remaining</code></pre>
+<pre><code>drop_na: removed 252 rows (2%), 12,323 rows remaining</code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="do">## Add UTM</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>d_haul <span class="ot">&lt;-</span> <span class="fu">add_utm_columns</span>(d_haul, <span class="fu">c</span>(<span class="st">&quot;lon&quot;</span>, <span class="st">&quot;lat&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="do">## Add UTM</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>d_haul <span class="ot">&lt;-</span> <span class="fu">add_utm_columns</span>(d_haul, <span class="fu">c</span>(<span class="st">&quot;lon&quot;</span>, <span class="st">&quot;lat&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
 <pre><code>Warning: Multiple UTM zones detected.
 Proceeding with the most common value.
@@ -3576,8 +3449,8 @@ You may wish to choose a different projection.</code></pre>
 <div class="cell-output cell-output-stderr">
 <pre><code>Visit https://epsg.io/32633 to verify.</code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Save!</span></span>
-<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(d_haul, <span class="fu">paste0</span>(home, <span class="st">&quot;/data/clean/catch_clean.csv&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Save!</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(d_haul, <span class="fu">paste0</span>(home, <span class="st">&quot;/data/clean/catch_clean.csv&quot;</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
 </section>
 

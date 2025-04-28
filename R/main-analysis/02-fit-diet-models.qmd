@@ -67,6 +67,12 @@ d <- read_csv(paste0(home, "/data/clean/stomachs.csv")) |>
   filter(rpw_spr < 0.5) |>
   filter(rpw_sad < 0.5) |>
   filter(rpw_her < 0.5)
+
+# d |>
+#   mutate(rpw = rpw_spr + rpw_sad + rpw_her) |>
+#   summarise(min = min(rpw), .by = year) |>
+#   distinct(min)
+
 ```
 
 Extra test plot

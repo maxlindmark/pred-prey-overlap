@@ -56,7 +56,7 @@ d <- read_csv(paste0(home, "/data/stomach/stomachs_v1.csv")) |>
   filter(year >= 1993) |>
   dplyr::select(
     rpw_sad, rpw_spr, rpw_her, year, month, day, day_of_year, pred_weight,
-    pred_length, lat, lon, ices_rect, X, Y, pred_ID, Haul_ID
+    pred_length, lat, lon, ices_rect, X, Y, pred_ID, Haul_ID, rpw_tot
     ) |> 
   rename(haul_id = Haul_ID) |> 
   separate(haul_id,

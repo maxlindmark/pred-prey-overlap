@@ -1,7 +1,8 @@
 ---
 title: "Calculate predation and spatial overlap with prey"
 author: "Max Lindmark"
-date: "`r format(Sys.time(), '%d %B, %Y')`"
+date: "`r format(Sys.time(), '%d %B, %Y')`" 
+
 format: 
   html:
     page-layout: full
@@ -20,7 +21,6 @@ execute:
 ## Load packages & source functions
 
 ```{r libraries}
-#| cache: false
 #| message: false
 #| warning: false
 #| code-fold: true
@@ -786,7 +786,7 @@ clean_ovr_plot <- bind_rows(spr_ovr, her_ovr, sad_ovr)
 
 blues <- brewer.pal(n = 4, name = "Blues")
 
-clean_ovr |>
+p1 <- clean_ovr |>
   filter(var == "median") |> 
   group_by(species) |>
   data_grid(year = seq_range(year, n = 51)) |>
@@ -807,6 +807,8 @@ clean_ovr |>
   ) +
   guides(fill = "none") +
   labs(x = "Year", y = "Spatial overlap index\n(Local index of collocation)")
+
+p1
 
 ggsave(paste0(home, "/figures/annual_overlap.pdf"), width = 18, height = 7, units = "cm")
 ```

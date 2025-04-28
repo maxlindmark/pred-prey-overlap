@@ -20,7 +20,7 @@ loc_collocspfn_tot <- function(prey, pred) {
   sum((p_prey * p_pred) / (sqrt(sum(p_prey^2, na.rm = T)) * sqrt(sum(p_pred^2, na.rm = T))))
 }
 
-# Asymmetrical alpha # ML: think this is wrong! should be a squared term in the numerator??
+# Asymmetrical alpha # ML: think this is wrong! should be a square root term in the numerator??
 asymmalpha_overlapspfn <- function(prey, pred) {
   p_prey <- prey / sum(prey, na.rm = T)
   p_pred <- pred / sum(pred, na.rm = T)

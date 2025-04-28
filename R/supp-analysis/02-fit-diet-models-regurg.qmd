@@ -1,0 +1,424 @@
+---
+title: "Fit stomach content models"
+author: "Max Lindmark"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+format: 
+  html:
+    page-layout: full
+    embed-resources: true
+knitr: 
+  opts_chunk:
+    fig.align: center
+    out-width: 80%
+editor: source
+execute: 
+  echo: true
+  eval: true
+  cache: false
+---
+
+## Load libraries
+
+```{r libs}
+#| message: false
+#| warning: false
+#| cache: false
+
+library(tidyverse)
+library(devtools)
+library(sdmTMB)
+library(sdmTMBextra)
+library(tidylog)
+library(viridis)
+library(egg)
+library(ggtext)
+
+devtools::source_url("https://raw.githubusercontent.com/maxlindmark/pred-prey-overlap/main/R/functions/map-plot.R")
+
+# Set path
+home <- here::here()
+
+set.seed(99)
+```
+
+## Read cleaned data
+
+```{r}
+#| message: false
+#| warning: false
+
+# We want to scale oxygen, temperature, depth and salinity using the means of the catch data
+catch <- read_csv(paste0(home, "/data/clean/catch_clean.csv")) |> drop_na(depth, oxy, salinity, temp)
+
+d <- read_csv(paste0(home, "/data/clean/stomachs.csv")) |>
+  filter(!rpw_tot == 0) |> 
+  mutate(
+    year_f = as.factor(year),
+    month_f = as.factor(month),
+    oxy_sc = (oxy - mean(catch$oxy)) / sd(catch$oxy),
+    temp_sc = (temp - mean(catch$temp)) / sd(catch$temp),
+    depth_sc = (depth - mean(catch$depth)) / sd(catch$depth),
+    salinity_sc = (salinity - mean(catch$salinity)) / sd(catch$salinity)
+  ) |>
+  mutate(across(
+    .cols = c("saduria", "biomass_spr", "biomass_her", "pred_length"),
+    .fns = scale,
+    .names = "{.col}_sc"
+  )) |>
+  filter(rpw_spr < 0.5) |>
+  filter(rpw_sad < 0.5) |>
+  filter(rpw_her < 0.5)
+
+# d |>
+#   mutate(rpw = rpw_spr + rpw_sad + rpw_her) |>
+#   summarise(min = min(rpw), .by = year) |>
+#   distinct(min)
+
+```
+
+## Set up a mesh
+
+```{r}
+#| message: false
+#| warning: false
+
+mesh <- make_mesh(d, c("X", "Y"), cutoff = 10)
+
+ggplot() +
+  inlabru::gg(mesh$mesh) +
+  coord_fixed() +
+  geom_point(aes(X, Y), data = d, alpha = 0.2, size = 0.5) +
+  labs(x = "Easting (km)", y = "Northing (km)")
+```
+
+## Fit models
+
+Sprat
+
+```{r}
+mspr1 <- sdmTMB(
+  rpw_spr ~ depth_sc + breakpt(biomass_spr_sc) + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  time_varying_type = "ar1",
+  spatial = "on",
+  spatiotemporal = "iid",
+  #family = delta_gamma(type = "poisson-link"),
+  family = tweedie()
+  )
+
+sanity(mspr1)
+mspr1
+
+mspr2 <- sdmTMB(
+  rpw_spr ~ depth_sc + biomass_spr_sc + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  time_varying_type = "ar1",
+  spatial = "on",
+  spatiotemporal = "iid",
+  #family = delta_gamma(type = "poisson-link"),
+  family = tweedie()
+  )
+
+sanity(mspr2)
+mspr2
+
+mspr3 <- sdmTMB(
+  rpw_spr ~ depth_sc + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  time_varying_type = "ar1",
+  spatial = "on",
+  spatiotemporal = "iid",
+  #family = delta_gamma(type = "poisson-link"),
+  family = tweedie()
+  )
+
+sanity(mspr3)
+mspr3
+
+AIC(mspr1, mspr2, mspr3)
+
+AIC(mspr1, mspr2, mspr3) |>
+  rownames_to_column() |>
+  dplyr::select(-df) |>
+  mutate(
+    min_AIC = min(AIC),
+    delta_AIC = AIC - min_AIC
+  ) |>
+  dplyr::select(delta_AIC, rowname) |>
+  pivot_wider(values_from = delta_AIC, names_from = rowname)
+
+
+tidy(mspr3, exponentiate = TRUE)
+tidy(mspr3, conf.int = TRUE, effects = "ran_pars")
+
+saveRDS(mspr3, paste0(home, "/output/mspr_regurg.rds"))
+```
+
+Herring
+
+```{r}
+mher1 <- sdmTMB(
+  rpw_her ~ depth_sc + breakpt(biomass_her_sc) + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  time_varying_type = "ar1",
+  spatial = "on",
+  spatiotemporal = "iid",
+  #family = delta_gamma(type = "poisson-link"),
+  family = tweedie()
+  )
+
+sanity(mher1)
+
+mher2 <- sdmTMB(
+  rpw_her ~ depth_sc + biomass_her_sc + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  time_varying_type = "ar1",
+  spatial = "on",
+  spatiotemporal = "iid",
+  #family = delta_gamma(type = "poisson-link"),
+  family = tweedie()
+  )
+
+sanity(mher2)
+mher2
+
+mher3 <- sdmTMB(
+  rpw_her ~ depth_sc + pred_length_sc,
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  time_varying_type = "ar1",
+  spatial = "on",
+  spatiotemporal = "iid",
+  #family = delta_gamma(type = "poisson-link"),
+  family = tweedie()
+  )
+
+sanity(mher3)
+mher3
+
+AIC(mher1, mher2, mher3)
+
+AIC(mher1, mher2, mher3) |>
+  rownames_to_column() |>
+  dplyr::select(-df) |>
+  mutate(
+    min_AIC = min(AIC),
+    delta_AIC = AIC - min_AIC
+  ) |>
+  dplyr::select(delta_AIC, rowname) |>
+  pivot_wider(values_from = delta_AIC, names_from = rowname)
+
+tidy(mher3, exponentiate = TRUE)
+tidy(mher3, conf.int = TRUE, effects = "ran_pars")
+
+saveRDS(mher3, paste0(home, "/output/mher_regurg.rds"))
+```
+
+Saduria
+
+```{r}
+msad1 <- sdmTMB(
+  rpw_sad ~ depth_sc + breakpt(saduria_sc) + pred_length_sc + (1|month_f),
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  time_varying_type = "ar1",
+  spatial = "on",
+  spatiotemporal = "iid",
+  family = delta_gamma(type = "poisson-link"),
+  #family = tweedie()
+  )
+
+sanity(msad1)
+msad1
+
+msad2 <- sdmTMB(
+  rpw_sad ~ depth_sc + saduria_sc + pred_length_sc + (1|month_f),
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  time_varying_type = "ar1",
+  spatial = "on",
+  spatiotemporal = "iid",
+  family = delta_gamma(type = "poisson-link"),
+  #family = tweedie()
+  )
+
+sanity(msad2)
+msad2
+
+msad3 <- sdmTMB(
+  rpw_sad ~ depth_sc + pred_length_sc + (1|month_f),
+  data = d,
+  mesh = mesh,
+  time = "year",
+  extra_time = c(2011),
+  time_varying = ~1,
+  time_varying_type = "ar1",
+  spatial = "on",
+  spatiotemporal = "iid",
+  family = delta_gamma(type = "poisson-link")
+  #family = tweedie()
+  )
+
+sanity(msad3)
+msad3
+
+AIC(msad1, msad2, msad3)
+
+AIC(msad1, msad2, msad3) |>
+  rownames_to_column() |>
+  dplyr::select(-df) |>
+  mutate(
+    min_AIC = min(AIC),
+    delta_AIC = AIC - min_AIC
+  ) |>
+  dplyr::select(delta_AIC, rowname) |>
+  pivot_wider(values_from = delta_AIC, names_from = rowname)
+
+tidy(msad1, exponentiate = TRUE, model = 1)
+tidy(msad1, conf.int = TRUE, effects = "ran_pars", model = 1)
+
+tidy(msad1, exponentiate = TRUE, model = 2)
+tidy(msad1, conf.int = TRUE, effects = "ran_pars", model = 2)
+
+saveRDS(msad1, paste0(home, "/output/msad_regurg.rds"))
+```
+
+## Residuals
+
+```{r}
+# Sprat
+spr_res <- simulate(mspr3, nsim = 100, type = "mle-mvn") |>
+  dharma_residuals(mspr3)
+
+# Herring
+her_res <- simulate(mher3, nsim = 100, type = "mle-mvn") |>
+  dharma_residuals(mher3)
+
+# Saduria
+sad_res <- simulate(msad1, nsim = 100, type = "mle-mvn") |>
+  dharma_residuals(msad1)
+
+res <- bind_rows(
+  spr_res |> mutate(prey = "Sprat"),
+  her_res |> mutate(prey = "Herring"),
+  sad_res |> mutate(prey = "Saduria")
+)
+
+ggplot(res, aes(observed, expected)) +
+  geom_point(color = "grey30", shape = 21, size = 0.5) +
+  geom_abline(col = "tomato3", linewidth = 0.6) +
+  theme(aspect.ratio = 1) +
+  facet_wrap(~prey) +
+  labs(x = "Observed", y = "Expected")
+
+ggsave(paste0(home, "/figures/supp/qq_diet.pdf"), width = 17, height = 7, units = "cm")
+```
+
+```{r}
+# Conditional of saduria biomass
+nd_sad <- tibble(
+  depth_sc = 0, pred_length_sc = 0, year = 2019L, X = mean(d$X), Y = mean(d$Y),
+  month_f = as.factor(11),
+  saduria_sc = seq(
+    quantile(d$saduria_sc, 0.05),
+    quantile(d$saduria_sc, 0.95),
+    length.out = 30
+  )
+)
+
+#psad <- predict(msad1, newdata = nd_sad, re_form = NA, re_form_iid = NA, se_fit = TRUE)
+
+sad_sims <- predict(msad1, newdata = nd_sad, re_form = NA, re_form_iid = NA, nsim = 500, model = NA) |>
+  as.data.frame() |> 
+  bind_cols(nd_sad) |> 
+  pivot_longer(cols = starts_with("V"), names_to = "sim") |> 
+  mutate(sim = as.factor(sim))
+
+sad_sims_sum <- sad_sims |> 
+  # summarise(median = median(exp(value)),
+  #           upr = quantile(exp(value), 0.9),
+  #           lwr = quantile(exp(value), 0.1),
+  #           .by = saduria_sc) |>
+  summarise(median = median(value),
+            upr = quantile(value, 0.9),
+            lwr = quantile(value, 0.1),
+            .by = saduria_sc)
+
+sad_sims_sum |> 
+  ggplot(aes(saduria_sc, median)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.3) +
+  # geom_line(data = sad_sims |> filter(sim %in% sample(levels(sim), 30)),
+  #           aes(saduria_sc, value, group = sim),
+  #           alpha = 0.3) +
+  geom_line() + 
+  labs(
+    y = "Relative *Saduria* weight",
+    x = "Scaled *Saduria* density"
+  ) +
+  theme(axis.title = element_markdown()) +
+  NULL
+
+ggsave(paste0(home, "/figures/supp/conditional_prey.pdf"), width = 15, height = 11, units = "cm")
+```
+
+```{r}
+# Conditional of herring biomass
+# nd_her <- tibble(
+#   depth_sc = 0, pred_length_sc = 0, year = 2019L, X = mean(d$X), Y = mean(d$Y),
+#   month_f = as.factor(11),
+#   biomass_her_sc = seq(
+#     quantile(d$biomass_her_sc, 0.05, na.rm = TRUE),
+#     quantile(d$biomass_her_sc, 0.95, na.rm = TRUE),
+#     length.out = 30
+#   )
+# )
+# 
+# tidy(mher1)
+# tidy(mher1, exponentiate = TRUE)
+# 
+# pher <- predict(mher1, newdata = nd_her, re_form = NA, re_form_iid = NA, type = "response")
+# 
+# pher |>
+#   ggplot(aes(biomass_her_sc, est)) +
+#   #geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.3) +
+#   geom_line() +
+#   labs(
+#     y = "Relative herring weight",
+#     x = "Scaled herring density"
+#   ) +
+#   theme(axis.title = element_markdown()) +
+#   NULL
+# 
+# ggsave(paste0(home, "/figures/supp/conditional_prey.pdf"), width = 15, height = 11, units = "cm")
+```
+
+
