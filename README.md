@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/632760838.svg)](https://doi.org/10.5281/zenodo.17160542)
+
 ## Weak effects of local prey density and spatial overlap on predation intensity in a temperate marine ecosystem
 In this paper we fit spatiotemporal models to stomach content data and biomass density of cod to estimate biomass weighted indices of predation by cod on sprat, herring and the isopod *Saduria entomon*. Next we correlated these indices with spatial overlap, to see if predation (per capita and total), is higher in years when predators and prey overlap more.
 
