@@ -84,7 +84,7 @@
     },
     "MASS": {
       "Package": "MASS",
-      "Version": "7.3-60",
+      "Version": "7.3-60.0.1",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -95,7 +95,7 @@
         "stats",
         "utils"
       ],
-      "Hash": "a56a6365b3fa73293ea8d084be0d9bb0"
+      "Hash": "b765b28387acc8ec9e9c1530713cb19c"
     },
     "Matrix": {
       "Package": "Matrix",
@@ -559,6 +559,17 @@
         "sass"
       ],
       "Hash": "c0d8599494bc7fb408cd206bbdd9cab0"
+    },
+    "caTools": {
+      "Package": "caTools",
+      "Version": "1.18.3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "bitops"
+      ],
+      "Hash": "ab79c733080d83b4ad8a2cc33c1ef393"
     },
     "cachem": {
       "Package": "cachem",
@@ -1376,12 +1387,13 @@
     },
     "ggpmisc": {
       "Package": "ggpmisc",
-      "Version": "0.5.6",
+      "Version": "0.6.2",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
         "MASS",
         "R",
+        "caTools",
         "confintr",
         "dplyr",
         "generics",
@@ -1392,6 +1404,7 @@
         "lubridate",
         "multcomp",
         "multcompView",
+        "nlme",
         "plyr",
         "polynom",
         "quantreg",
@@ -1401,11 +1414,11 @@
         "stats",
         "tibble"
       ],
-      "Hash": "e35c13b0b693142dfe4bec1b54b4e597"
+      "Hash": "c08c1a7501c04b2e70f470663707c751"
     },
     "ggpp": {
       "Package": "ggpp",
-      "Version": "0.5.7",
+      "Version": "0.5.9",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -1429,7 +1442,7 @@
         "xts",
         "zoo"
       ],
-      "Hash": "f1070350e25c5497853ccd0d100d8b8f"
+      "Hash": "ebdefe9e80a95e278ecda7d47c6c3c4e"
     },
     "ggridges": {
       "Package": "ggridges",
