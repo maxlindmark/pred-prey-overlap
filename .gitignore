@@ -53,7 +53,10 @@ WKSPATIAL - Report of the Workshop on Spatial Analyses for the Baltic Sea_2015.p
 ecog12909-sup-0001-appendixs1.docx
 SC10 Foodwebs - Final report_for submission_CLEAN - Authors added.pdf
 # Output
-output/
+mcod.rds
+mher_regurg.rds
+msad_regurg.rds
+mspr_regurg.rds
 # Decktape
 decktape/
 test_INLA.R
@@ -74,3 +77,4 @@ comments_ML.docx
 R/supp-analysis/02-fit-diet-models-q4.qmd
 R/supp-analysis/bivariate-dens-diet.qmd
 /drafts/
+
