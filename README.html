@@ -352,6 +352,7 @@ display: none;
 </div>
 
 
+<p><a href="https://doi.org/10.5281/zenodo.17160542"><img src="data:image/svg+xml; charset=utf-8;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciCiAgICAgd2lkdGg9IjE5MC44NDM3NSIgaGVpZ2h0PSIyMCI+CiAgICAgICAgPGxpbmVhckdyYWRpZW50IGlkPSJiIiB4Mj0iMCIgeTI9IjEwMCUiPgogICAgICAgICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNiYmIiIHN0b3Atb3BhY2l0eT0iLjEiLz4KICAgICAgICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLW9wYWNpdHk9Ii4xIi8+CiAgICAgICAgPC9saW5lYXJHcmFkaWVudD4KICAgICAgICA8bWFzayBpZD0iYSIgd2lkdGg9IjE5MC44NDM3NSIgaGVpZ2h0PSIyMCI+CiAgICAgICAgICAgIDxyZWN0IHdpZHRoPSIxOTAuODQzNzUiIGhlaWdodD0iMjAiIHJ4PSIzIgogICAgICAgICAgICBmaWxsPSIjZmZmIi8+CiAgICAgICAgPC9tYXNrPgogICAgICAgIDxnIG1hc2s9InVybCgjYSkiPgogICAgICAgICAgICA8cGF0aCBmaWxsPSIjNTU1IiBkPSJNMCAwaDMxLjM3NXYyMEgweiIgLz4KICAgICAgICAgICAgPHBhdGggZmlsbD0iIzAwN2VjNiIKICAgICAgICAgICAgZD0iTTMxLjM3NSAwaDE1OS40Njg3NXYyMEgzMS4zNzV6IgogICAgICAgICAgICAvPgogICAgICAgICAgICA8cGF0aCBmaWxsPSJ1cmwoI2IpIiBkPSJNMCAwaDE5MC44NDM3NXYyMEgweiIgLz4KICAgICAgICA8L2c+CiAgICAgICAgPGcgZmlsbD0iI2ZmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkRlamFWdSBTYW5zLAogICAgICAgIFZlcmRhbmEsR2VuZXZhLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTEiPgogICAgICAgICAgICA8dGV4dCB4PSIxNi4xODc1IiB5PSIxNSIgZmlsbD0iIzAxMDEwMSIKICAgICAgICAgICAgZmlsbC1vcGFjaXR5PSIuMyI+CiAgICAgICAgICAgICAgICBET0kKICAgICAgICAgICAgPC90ZXh0PgogICAgICAgICAgICA8dGV4dCB4PSIxNi4xODc1IiB5PSIxNCI+CiAgICAgICAgICAgICAgICBET0kKICAgICAgICAgICAgPC90ZXh0PgogICAgICAgICAgICA8dGV4dCB4PSIxMTAuNjA5Mzc1IgogICAgICAgICAgICB5PSIxNSIgZmlsbD0iIzAxMDEwMSIgZmlsbC1vcGFjaXR5PSIuMyI+CiAgICAgICAgICAgICAgICAxMC41MjgxL3plbm9kby4xNzE2MDU0MwogICAgICAgICAgICA8L3RleHQ+CiAgICAgICAgICAgIDx0ZXh0IHg9IjExMC42MDkzNzUiIHk9IjE0Ij4KICAgICAgICAgICAgICAgIDEwLjUyODEvemVub2RvLjE3MTYwNTQzCiAgICAgICAgICAgIDwvdGV4dD4KICAgICAgICA8L2c+CiAgICA8L3N2Zz4=" alt="DOI" /></a></p>
 <div id="weak-effects-of-local-prey-density-and-spatial-overlap-on-predation-intensity-in-a-temperate-marine-ecosystem" class="section level2">
 <h2>Weak effects of local prey density and spatial overlap on predation
 intensity in a temperate marine ecosystem</h2>
@@ -382,20 +383,13 @@ Apple M2 Sequoia 15.6.1 laptop.</p>
 <div id="repository-structure" class="section level3">
 <h3>Repository structure</h3>
 <p><code>R</code>: code to prepare data, fit models, code meant to be
-sourced, calculate indicices, and make figures.</p>
+sourced, calculate indices, and make figures.</p>
 <p><code>data</code>: trawl survey data, prediction grid and stomach
-content data</p>
-<p><code>output</code>: <code>sdmTMB</code> model objects
-(<code>.rds</code> files). The</p>
-<p><code>docs</code>: .qmd and .html of simple vignette</p>
-<p><code>functions</code>: code to produce base maps</p>
-<p><code>results</code>: output and figures from case studies and
-experiments</p>
-<p><code>timing</code>: code to test timing of fitting diffused vs
-standard model, and to calculate <span class="math inline">\(\mathbf{D}^{-1}\mathbf{x}\)</span> using either
-sparse LU decomposition or constructing the dense matrix</p>
-<p><code>tmb</code>: .cpp files for all models (case studies,
-simulation)</p>
+content data.</p>
+<p><code>figures</code>: figures for paper are saved here</p>
+<p><code>output</code>: sdmTMB model objects (.rds files). The cod
+density model is omitted because it’s too large and needs to be
+refitted. On my machine it takes 18 minutes.</p>
 </div>
 </div>
 
