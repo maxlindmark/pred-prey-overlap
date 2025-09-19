@@ -137,13 +137,25 @@ sim_her <- predict(mher, newdata = pred_grid, nsim = nsim) |>
   as.data.frame() |>
   bind_cols(pred_grid |> dplyr::select(X, Y, year))
 
+# vals <- exp(as.vector(as.matrix(sim_her[ , 1:500])))
+# summary(vals)
+# summary(vals[vals <= 1])
+
 sim_spr <- predict(mspr, newdata = pred_grid, nsim = nsim) |>
   as.data.frame() |>
   bind_cols(pred_grid |> dplyr::select(X, Y, year))
 
+# vals <- exp(as.vector(as.matrix(sim_spr[ , 1:500])))
+# summary(vals)
+# summary(vals[vals <= 1])
+
 sim_sad <- predict(msad, newdata = pred_grid, nsim = nsim) |>
   as.data.frame() |>
   bind_cols(pred_grid |> dplyr::select(X, Y, year))
+
+# vals <- exp(as.vector(as.matrix(sim_sad[ , 1:500])))
+# summary(vals)
+# summary(vals[vals <= 1])
 ```
 
 The density prediction is used later for spatial overlap + it gets left_joined to the other sims, so it gets a special treatment
@@ -155,6 +167,9 @@ pred_grid_density <- pred_grid |>
   dplyr::select(X, Y, year, saduria, biomass_spr, biomass_her, sim_density, sim) |>
   mutate(sim_density = exp(sim_density)) |>
   filter(sim_density < quantile(sim_density, 0.9999))
+
+summary(pred_grid_density$sim_density)
+summary(pred_grid_density2$sim_density)
 ```
 
 ## Plot cod density in space for two years

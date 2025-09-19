@@ -64,6 +64,8 @@ d <- read_csv(paste0(home, "/data/stomach/stomachs_v1.csv")) |>
            into = c("Country", "Year", "Month", "Day", "HaulNo", "ICESrectangle"),
            remove = FALSE) |> 
   mutate(date = paste(year, month, day, sep = "-"))
+
+d |> filter(rpw_tot == 0) |> nrow() / nrow(d)
 ```
 
 ## Add pelagic covariates

@@ -68,11 +68,21 @@ d <- read_csv(paste0(home, "/data/clean/stomachs.csv")) |>
   filter(rpw_sad < 0.5) |>
   filter(rpw_her < 0.5)
 
+nrow(d)
+
 # d |>
 #   mutate(rpw = rpw_spr + rpw_sad + rpw_her) |>
 #   summarise(min = min(rpw), .by = year) |>
 #   distinct(min)
 
+colMeans(d[ , c("rpw_sad", "rpw_spr", "rpw_her")] == 0, na.rm = TRUE)
+
+d |>
+  mutate(test = ifelse(rpw_spr + rpw_sad + rpw_her == 0, "no_key", "key")) |> 
+  filter(test == "key") |> 
+  nrow() / nrow(d)
+
+d |> filter(rpw_tot == 0) |> nrow() / nrow(d)
 ```
 
 Extra test plot

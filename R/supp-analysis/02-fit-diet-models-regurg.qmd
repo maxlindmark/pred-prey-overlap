@@ -51,7 +51,7 @@ set.seed(99)
 catch <- read_csv(paste0(home, "/data/clean/catch_clean.csv")) |> drop_na(depth, oxy, salinity, temp)
 
 d <- read_csv(paste0(home, "/data/clean/stomachs.csv")) |>
-  filter(!rpw_tot == 0) |> 
+  filter(!rpw_tot == 0) |> # HERE
   mutate(
     year_f = as.factor(year),
     month_f = as.factor(month),
